@@ -332,47 +332,28 @@ def _sanitize_filename(title, max_len=60):
     return safe[:max_len] if safe else "video"
 
 
-def _transcribe_single_video(video, out_folder, has_diarize, has_word_ts, is_hebrew_default,
-                              min_speakers, max_speakers, output_format, prefix):
-    """Submit + poll a single video. Called from a thread pool."""
+def _process_video(video, out_folder, has_diarize, has_word_ts, is_hebrew,
+                   min_speakers, max_speakers, output_format):
     idx   = video["video_index"]
     title = video.get("title", f"video_{idx}")
     url   = video["url"]
     lang  = video.get("language")
+    video_is_hebrew = (lang == "he") if lang is not None else is_hebrew
+    duration_sec    = video.get("duration_seconds")
 
-    if lang is not None:
-        video_is_hebrew = (lang == "he")
-    else:
-        video_is_hebrew = is_hebrew_default
-
-    safe_title = _sanitize_filename(title)
-    base_name  = f"{idx}_{safe_title}_transcript"
-    base_path  = os.path.join(out_folder, base_name)
-
-    def vlog(msg):
-        log(f"[V{idx}] {msg}")
-
-    vlog(f'Starting: "{title}"')
-
+    base_path = os.path.join(out_folder, f"{idx}_{_sanitize_filename(title)}_transcript")
+    log(f'[V{idx}] Starting: "{title}"')
     try:
-        job_id, server_duration = submit_job(
-            url, has_diarize, has_word_ts, min_speakers, max_speakers, video_is_hebrew
-        )
-        # patch log lines emitted by submit_job — they won't have the prefix,
-        # but that's acceptable; the vlog lines above/below frame each video.
-
-        initial_wait = calc_initial_wait(server_duration, has_diarize) if server_duration else None
+        job_id, server_duration = submit_job(url, has_diarize, has_word_ts,
+                                             min_speakers, max_speakers, video_is_hebrew)
+        initial_wait = calc_initial_wait(duration_sec or server_duration, has_diarize)
         data = poll_job(job_id, initial_wait)
-
-        if has_diarize is None:
-            segments = extract_segments(data)
-            speakers = set(s.get("speaker", "") for s in segments if s.get("speaker"))
+        effective_diarize = has_diarize
+        if effective_diarize is None:
+            speakers = set(s.get("speaker", "") for s in extract_segments(data) if s.get("speaker"))
             effective_diarize = len(speakers) > 1
-        else:
-            effective_diarize = has_diarize
-
         save_output(data, base_path, effective_diarize, output_format)
-        vlog(f'Done: "{title}"')
+        log(f'[V{idx}] Done: "{title}"')
         return True
     except Exception as exc:
         log(f"[V{idx}] ERROR: {exc}")
@@ -386,12 +367,12 @@ def transcribe_playlist(playlist_url, has_diarize, has_word_ts, is_hebrew, min_s
     log("[PLAYLIST] Fetching playlist info...")
     info = get_playlist_estimate(playlist_url)
 
-    playlist_id      = info["playlist_id"]
-    count            = info["count"]
-    total_sec        = info["total_seconds"]
-    balance_sec      = info["user_seconds_remaining"]
-    has_enough       = info["has_enough_balance"]
-    videos           = info["videos"]
+    playlist_id = info["playlist_id"]
+    count       = info["count"]
+    total_sec   = info["total_seconds"]
+    balance_sec = info["user_seconds_remaining"]
+    has_enough  = info["has_enough_balance"]
+    videos      = info["videos"]
 
     log(f"[PLAYLIST] count={count} total={total_sec}s balance={balance_sec}s enough={has_enough}")
     for v in videos:
@@ -417,16 +398,12 @@ def transcribe_playlist(playlist_url, has_diarize, has_word_ts, is_hebrew, min_s
     failed    = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         futures = {
-            pool.submit(
-                _transcribe_single_video,
-                v, out_folder, has_diarize, has_word_ts, is_hebrew,
-                min_speakers, max_speakers, output_format, f"V{v['video_index']}"
-            ): v["video_index"]
+            pool.submit(_process_video, v, out_folder, has_diarize, has_word_ts,
+                        is_hebrew, min_speakers, max_speakers, output_format): v["video_index"]
             for v in accessible
         }
         for future in concurrent.futures.as_completed(futures):
-            ok = future.result()
-            if ok:
+            if future.result():
                 completed += 1
             else:
                 failed += 1
