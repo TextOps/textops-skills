@@ -117,8 +117,7 @@ If the user asks about their remaining balance (e.g. "כמה נשאר לי?", "b
 python "<skill_dir>/scripts/transcribe.py" --balance
 ```
 
-Read the `[BALANCE] X seconds remaining (~Y minutes)` line and tell the user:
-> "יתרה: X שניות (~Y דקות)"
+The script prints: `[BALANCE] X seconds remaining (~Y minutes)` — relay this line to the user as-is.
 
 Then stop — do not proceed to transcription.
 
@@ -150,21 +149,19 @@ python "<skill_dir>/scripts/transcribe.py" \
 
 Diarization, speaker count, language, and all other flags apply to the entire playlist unless the user specified otherwise. **Do not ask.**
 
-The script prints these tags — relay them to the user in real time:
+The script prints structured log lines — relay them to the user as they arrive:
 
-| Tag | What to tell the user |
+| Tag | Action |
 |---|---|
-| `[PLAYLIST] count=N total=Xs balance=Ys enough=true/false` | "פלייליסט: N סרטונים, סה\"כ X שניות. יתרה: Y שניות." |
-| `[VIDEO] N "Title" Xs accessible=true lang=XX` | Show a summary list once all videos are printed |
-| `[PLAYLIST] Skipping K inaccessible video(s)` | "מדלג על K סרטונים לא נגישים" |
-| `[PLAYLIST] Output folder: /path/...` | "תיקיית פלט: /path/..." |
-| `[V{N}] Starting: "Title"` | עדכון שוטף — "מתחיל: Title" |
-| `[V{N}] Done: "Title"` | "הסתיים: Title" |
-| `[V{N}] ERROR: ...` | הצג את השגיאה |
-| `[PLAYLIST_DONE] folder=... N/M completed` | "הושלם! N/M סרטונים תומללו. תיקייה: ..." |
-
-If the script exits with code `2` (not enough balance), tell the user:
-> "אין מספיק יתרה לתמלל את כל הפלייליסט. ראה פירוט למעלה."
+| `[PLAYLIST] count=N total=Xs balance=Ys enough=true/false` | Relay as-is |
+| `[VIDEO] N "Title" Xs accessible=true/false lang=XX` | Relay as-is (once per video) |
+| `[PLAYLIST] Skipping K inaccessible video(s)` | Relay as-is |
+| `[PLAYLIST] Output folder: /path/...` | Relay as-is |
+| `[V{N}] Starting: "Title"` | Relay as-is |
+| `[V{N}] Done: "Title"` | Relay as-is |
+| `[V{N}] ERROR: ...` | Relay as-is |
+| `[PLAYLIST_DONE] folder=... N/M completed` | Relay as-is |
+| `ERROR: Not enough balance. Need Xs, have Ys (short by Zs).` | Relay as-is (script exits with code 2) |
 
 **After playlist mode completes — stop.** Do not continue to Step 2.
 
