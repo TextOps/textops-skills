@@ -173,23 +173,32 @@ def submit_job(download_url, has_diarization, word_timestamps=False, min_speaker
         "is_hebrew": is_hebrew,
     }
     log("[JOB] Submitting...")
-    res = requests.post(SUBMIT_MODAL_URL,
-                        json={"download_url": download_url, "params": params},
-                        headers={"textops-api-key": API_KEY})
-    if res.status_code == 400:
-        body = res.json() if res.content else {}
-        err  = body.get("error", "Bad request")
-        details = body.get("details", "")
-        if "not accessible" in err:
-            log(f"ERROR: URL is not publicly accessible. {details}".strip())
-            log("  If this is a Google Drive link, set sharing to 'Anyone with the link'.")
-        elif "not a transcribable" in err:
-            log("ERROR: File format is not supported for transcription.")
-            log("  Supported formats: mp3/mp4/wav/m4a/ogg/flac/aac/wma/opus/webm/mkv/avi/mov/wmv/3gp/ts")
-        else:
-            log(f"ERROR: {err}. {details}".strip())
+    for attempt in range(1, 4):
+        res = requests.post(SUBMIT_MODAL_URL,
+                            json={"download_url": download_url, "params": params},
+                            headers={"textops-api-key": API_KEY})
+        if res.status_code == 400:
+            body = res.json() if res.content else {}
+            err  = body.get("error", "Bad request")
+            details = body.get("details", "")
+            if "not accessible" in err:
+                log(f"ERROR: URL is not publicly accessible. {details}".strip())
+                log("  If this is a Google Drive link, set sharing to 'Anyone with the link'.")
+            elif "not a transcribable" in err:
+                log("ERROR: File format is not supported for transcription.")
+                log("  Supported formats: mp3/mp4/wav/m4a/ogg/flac/aac/wma/opus/webm/mkv/avi/mov/wmv/3gp/ts")
+            else:
+                log(f"ERROR: {err}. {details}".strip())
+            sys.exit(1)
+        if res.status_code >= 500:
+            log(f"[JOB] Server error {res.status_code} (attempt {attempt}/3) — retrying in 5s...")
+            time.sleep(5)
+            continue
+        res.raise_for_status()
+        break
+    else:
+        log(f"ERROR: Server returned {res.status_code} after 3 attempts.")
         sys.exit(1)
-    res.raise_for_status()
     body = res.json()
     job_id = body["textopsJobId"]
     server_duration = body.get("duration_seconds")
@@ -325,45 +334,9 @@ def get_playlist_estimate(playlist_url):
     return res.json()
 
 
-def _sanitize_filename(title, max_len=60):
-    import re
-    safe = re.sub(r'[\\/:*?"<>|]', "_", title)
-    safe = safe.strip(". ")
-    return safe[:max_len] if safe else "video"
-
-
-def _process_video(video, out_folder, has_diarize, has_word_ts, is_hebrew,
-                   min_speakers, max_speakers, output_format):
-    idx   = video["video_index"]
-    title = video.get("title", f"video_{idx}")
-    url   = video["url"]
-    lang  = video.get("language")
-    video_is_hebrew = (lang == "he") if lang is not None else is_hebrew
-    duration_sec    = video.get("duration_seconds")
-
-    base_path = os.path.join(out_folder, f"{idx}_{_sanitize_filename(title)}_transcript")
-    log(f'[V{idx}] Starting: "{title}"')
-    try:
-        job_id, server_duration = submit_job(url, has_diarize, has_word_ts,
-                                             min_speakers, max_speakers, video_is_hebrew)
-        initial_wait = calc_initial_wait(duration_sec or server_duration, has_diarize)
-        data = poll_job(job_id, initial_wait)
-        effective_diarize = has_diarize
-        if effective_diarize is None:
-            speakers = set(s.get("speaker", "") for s in extract_segments(data) if s.get("speaker"))
-            effective_diarize = len(speakers) > 1
-        save_output(data, base_path, effective_diarize, output_format)
-        log(f'[V{idx}] Done: "{title}"')
-        return True
-    except Exception as exc:
-        log(f"[V{idx}] ERROR: {exc}")
-        return False
-
-
-def transcribe_playlist(playlist_url, has_diarize, has_word_ts, is_hebrew, min_speakers,
-                        max_speakers, output_format):
-    import concurrent.futures
-
+def print_playlist_info(playlist_url):
+    """Fetch playlist metadata and print structured info for the skill to read.
+    No transcription is performed here — the skill orchestrates individual jobs."""
     log("[PLAYLIST] Fetching playlist info...")
     info = get_playlist_estimate(playlist_url)
 
@@ -374,42 +347,19 @@ def transcribe_playlist(playlist_url, has_diarize, has_word_ts, is_hebrew, min_s
     has_enough  = info["has_enough_balance"]
     videos      = info["videos"]
 
-    log(f"[PLAYLIST] count={count} total={total_sec}s balance={balance_sec}s enough={has_enough}")
+    log(f"[PLAYLIST] id={playlist_id} count={count} total={total_sec}s balance={balance_sec}s enough={has_enough}")
     for v in videos:
-        lang = v.get("language") or "?"
+        lang = v.get("language") or "null"
         acc  = v.get("accessible")
-        log(f'[VIDEO] {v["video_index"]} "{v.get("title","")}" {v.get("duration_seconds","?")}s accessible={acc} lang={lang}')
+        dur  = v.get("duration_seconds", "null")
+        log(f'[VIDEO] index={v["video_index"]} title="{v.get("title","")}" duration={dur}s accessible={acc} lang={lang} url={v["url"]}')
 
     if not has_enough:
         shortfall = total_sec - balance_sec
         log(f"ERROR: Not enough balance. Need {total_sec}s, have {balance_sec}s (short by {shortfall}s).")
         sys.exit(2)
 
-    accessible = [v for v in videos if v.get("accessible") is not False]
-    skipped    = count - len(accessible)
-    if skipped:
-        log(f"[PLAYLIST] Skipping {skipped} inaccessible video(s)")
-
-    out_folder = os.path.join(os.getcwd(), f"playlist_{playlist_id}")
-    os.makedirs(out_folder, exist_ok=True)
-    log(f"[PLAYLIST] Output folder: {out_folder}")
-
-    completed = 0
-    failed    = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {
-            pool.submit(_process_video, v, out_folder, has_diarize, has_word_ts,
-                        is_hebrew, min_speakers, max_speakers, output_format): v["video_index"]
-            for v in accessible
-        }
-        for future in concurrent.futures.as_completed(futures):
-            if future.result():
-                completed += 1
-            else:
-                failed += 1
-
-    log(f"[PLAYLIST_DONE] folder={out_folder} {completed}/{len(accessible)} completed"
-        + (f" ({failed} failed)" if failed else ""))
+    log(f"[PLAYLIST_FOLDER] playlist_{playlist_id}")
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -468,8 +418,7 @@ def main():
     output_format = args.output_format
 
     if args.playlist:
-        transcribe_playlist(args.playlist, has_diarize, has_word_ts, is_hebrew,
-                            min_speakers, max_speakers, output_format)
+        print_playlist_info(args.playlist)
         sys.exit(0)
 
     # ── determine output path ─────────────────────────────────────────────────

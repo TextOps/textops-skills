@@ -138,31 +138,57 @@ Only enter playlist mode when the user **explicitly** asks to transcribe a full 
 
 **Do NOT enter playlist mode** if the user sends a YouTube URL that contains `list=` but asks to transcribe "this video" / "הסרטון הזה" — treat it as a single video and ignore the `list=` parameter.
 
-When playlist mode is explicitly requested, run:
+When playlist mode is explicitly requested:
+
+#### Step A — Fetch playlist info
+
+```bash
+python "<skill_dir>/scripts/transcribe.py" --playlist "<url>"
+```
+
+The script prints one `[PLAYLIST]` line and one `[VIDEO]` line per video. Parse them:
+
+- `[PLAYLIST] id=PLxxx count=N total=Xs balance=Ys enough=true/false`
+  → Tell the user: "Playlist: N videos, total X seconds. Balance: Y seconds."
+- `[VIDEO] index=N title="..." duration=Xs accessible=true/false lang=XX url=https://...`
+  → Collect all videos into a list. Show a summary to the user.
+- `[PLAYLIST_FOLDER] playlist_PLxxx`
+  → Save as `<folder_name>`. Tell the user: "Output folder: <folder_name>"
+- `ERROR: Not enough balance...`
+  → Tell the user: "Not enough balance to transcribe the full playlist." and stop.
+
+Create the output folder in the current working directory:
+```bash
+mkdir "<folder_name>"
+```
+
+Filter the video list: keep only videos where `accessible=true`.
+
+#### Step B — Transcribe videos (4 at a time)
+
+For each video, build the output path:
+- Sanitize the title: replace characters `\ / : * ? " < > |` with `_`, trim to 60 chars
+- Path: `<folder_name>/<index>_<sanitized_title>_transcript`
+
+Process videos in batches of 4: send **4 Bash tool calls in a single message** (in parallel), each running:
 
 ```bash
 python "<skill_dir>/scripts/transcribe.py" \
-  --playlist "<url>" \
+  --file "<video_url>" \
+  --output-path "<folder_name>/<index>_<sanitized_title>_transcript" \
   [--diarization false] \
   [--max-speakers N] \
-  [--is-hebrew false]
+  [--is-hebrew true|false]
 ```
 
-Diarization, speaker count, language, and all other flags apply to the entire playlist unless the user specified otherwise. **Do not ask.**
+- `--is-hebrew`: use `true` if the video's `lang` is `he`, `false` for any other language. If `lang` is `null`, apply the global setting for this playlist.
+- All other flags (diarization, speakers) apply to every video unless the user said otherwise.
 
-The script prints these tags — relay them to the user in real time:
+Wait for all 4 to complete, then send the next batch of 4.
 
-| Tag | What to tell the user |
-|---|---|
-| `[PLAYLIST] count=N total=Xs balance=Ys enough=true/false` | "Playlist: N videos, total X seconds. Balance: Y seconds." |
-| `[VIDEO] N "Title" Xs accessible=true/false lang=XX` | Show a summary list once all videos are printed |
-| `[PLAYLIST] Skipping K inaccessible video(s)` | "Skipping K inaccessible video(s)" |
-| `[PLAYLIST] Output folder: /path/...` | "Output folder: /path/..." |
-| `[V{N}] Starting: "Title"` | "Starting: Title" |
-| `[V{N}] Done: "Title"` | "Done: Title" |
-| `[V{N}] ERROR: ...` | Show the error |
-| `[PLAYLIST_DONE] folder=... N/M completed` | "Done! N/M videos transcribed. Folder: ..." |
-| `ERROR: Not enough balance. Need Xs, have Ys (short by Zs).` | "Not enough balance to transcribe the full playlist. See details above." |
+Tell the user the progress as jobs complete: "Done: Title (N/total)"
+
+When all videos are done, tell the user: "Done! N/M videos transcribed. Folder: <folder_name>"
 
 **After playlist mode completes — stop.** Do not continue to Step 2.
 
