@@ -117,7 +117,8 @@ If the user asks about their remaining balance (e.g. "כמה נשאר לי?", "b
 python "<skill_dir>/scripts/transcribe.py" --balance
 ```
 
-The script prints: `[BALANCE] X seconds remaining (~Y minutes)` — relay this line to the user as-is.
+Read the `[BALANCE] X seconds remaining (~Y minutes)` line and tell the user:
+> "Balance: X seconds remaining (~Y minutes)"
 
 Then stop — do not proceed to transcription.
 
@@ -149,19 +150,19 @@ python "<skill_dir>/scripts/transcribe.py" \
 
 Diarization, speaker count, language, and all other flags apply to the entire playlist unless the user specified otherwise. **Do not ask.**
 
-The script prints structured log lines — relay them to the user as they arrive:
+The script prints these tags — relay them to the user in real time:
 
-| Tag | Action |
+| Tag | What to tell the user |
 |---|---|
-| `[PLAYLIST] count=N total=Xs balance=Ys enough=true/false` | Relay as-is |
-| `[VIDEO] N "Title" Xs accessible=true/false lang=XX` | Relay as-is (once per video) |
-| `[PLAYLIST] Skipping K inaccessible video(s)` | Relay as-is |
-| `[PLAYLIST] Output folder: /path/...` | Relay as-is |
-| `[V{N}] Starting: "Title"` | Relay as-is |
-| `[V{N}] Done: "Title"` | Relay as-is |
-| `[V{N}] ERROR: ...` | Relay as-is |
-| `[PLAYLIST_DONE] folder=... N/M completed` | Relay as-is |
-| `ERROR: Not enough balance. Need Xs, have Ys (short by Zs).` | Relay as-is (script exits with code 2) |
+| `[PLAYLIST] count=N total=Xs balance=Ys enough=true/false` | "Playlist: N videos, total X seconds. Balance: Y seconds." |
+| `[VIDEO] N "Title" Xs accessible=true/false lang=XX` | Show a summary list once all videos are printed |
+| `[PLAYLIST] Skipping K inaccessible video(s)` | "Skipping K inaccessible video(s)" |
+| `[PLAYLIST] Output folder: /path/...` | "Output folder: /path/..." |
+| `[V{N}] Starting: "Title"` | "Starting: Title" |
+| `[V{N}] Done: "Title"` | "Done: Title" |
+| `[V{N}] ERROR: ...` | Show the error |
+| `[PLAYLIST_DONE] folder=... N/M completed` | "Done! N/M videos transcribed. Folder: ..." |
+| `ERROR: Not enough balance. Need Xs, have Ys (short by Zs).` | "Not enough balance to transcribe the full playlist. See details above." |
 
 **After playlist mode completes — stop.** Do not continue to Step 2.
 
