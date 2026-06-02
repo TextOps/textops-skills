@@ -65,9 +65,11 @@ API_KEY = _load_api_key()
 
 
 
-GET_UPLOAD_URL   = "https://text-ops-subs.com/api/v2/upload-url"
-SUBMIT_MODAL_URL = "https://text-ops-subs.com/api/v2/transcribe"
-CHECK_JOB_URL    = "https://text-ops-subs.com/api/v2/transcribe-status"
+GET_UPLOAD_URL        = "https://text-ops-subs.com/api/v2/upload-url"
+SUBMIT_MODAL_URL      = "https://text-ops-subs.com/api/v2/transcribe"
+CHECK_JOB_URL         = "https://text-ops-subs.com/api/v2/transcribe-status"
+BALANCE_URL           = "https://text-ops-subs.com/api/v2/balance"
+PLAYLIST_ESTIMATE_URL = "https://text-ops-subs.com/api/v2/playlist-estimate"
 
 SECS_PER_MIN     = 0.83   # 1 min of audio ≈ 0.83s → 1h file: first check ~40s (no diarization)
 DIARIZATION_MULT = 2.25   # diarization ×2.25 → 1h file: first check ~90s
@@ -298,10 +300,126 @@ def save_output(data, output_path, has_diarize, output_format):
         log(f"WARNING: {result.stderr.strip()}")
 
 
+# ── balance ───────────────────────────────────────────────────────────────────
+
+def get_balance():
+    res = requests.get(BALANCE_URL, headers={"textops-api-key": API_KEY})
+    res.raise_for_status()
+    seconds = res.json()["seconds_remaining"]
+    minutes = seconds // 60
+    log(f"[BALANCE] {seconds} seconds remaining (~{minutes} minutes)")
+    return seconds
+
+
+# ── playlist ──────────────────────────────────────────────────────────────────
+
+def get_playlist_estimate(playlist_url):
+    res = requests.post(PLAYLIST_ESTIMATE_URL,
+                        json={"playlist_url": playlist_url},
+                        headers={"textops-api-key": API_KEY})
+    if res.status_code == 400:
+        body = res.json() if res.content else {}
+        log(f"ERROR: {body.get('error', 'Bad request')}")
+        sys.exit(1)
+    res.raise_for_status()
+    return res.json()
+
+
+def _sanitize_filename(title, max_len=60):
+    import re
+    safe = re.sub(r'[\\/:*?"<>|]', "_", title)
+    safe = safe.strip(". ")
+    return safe[:max_len] if safe else "video"
+
+
+def _process_video(video, out_folder, has_diarize, has_word_ts, is_hebrew,
+                   min_speakers, max_speakers, output_format):
+    idx   = video["video_index"]
+    title = video.get("title", f"video_{idx}")
+    url   = video["url"]
+    lang  = video.get("language")
+    video_is_hebrew = (lang == "he") if lang is not None else is_hebrew
+    duration_sec    = video.get("duration_seconds")
+
+    base_path = os.path.join(out_folder, f"{idx}_{_sanitize_filename(title)}_transcript")
+    log(f'[V{idx}] Starting: "{title}"')
+    try:
+        job_id, server_duration = submit_job(url, has_diarize, has_word_ts,
+                                             min_speakers, max_speakers, video_is_hebrew)
+        initial_wait = calc_initial_wait(duration_sec or server_duration, has_diarize)
+        data = poll_job(job_id, initial_wait)
+        effective_diarize = has_diarize
+        if effective_diarize is None:
+            speakers = set(s.get("speaker", "") for s in extract_segments(data) if s.get("speaker"))
+            effective_diarize = len(speakers) > 1
+        save_output(data, base_path, effective_diarize, output_format)
+        log(f'[V{idx}] Done: "{title}"')
+        return True
+    except Exception as exc:
+        log(f"[V{idx}] ERROR: {exc}")
+        return False
+
+
+def transcribe_playlist(playlist_url, has_diarize, has_word_ts, is_hebrew, min_speakers,
+                        max_speakers, output_format):
+    import concurrent.futures
+
+    log("[PLAYLIST] Fetching playlist info...")
+    info = get_playlist_estimate(playlist_url)
+
+    playlist_id = info["playlist_id"]
+    count       = info["count"]
+    total_sec   = info["total_seconds"]
+    balance_sec = info["user_seconds_remaining"]
+    has_enough  = info["has_enough_balance"]
+    videos      = info["videos"]
+
+    log(f"[PLAYLIST] count={count} total={total_sec}s balance={balance_sec}s enough={has_enough}")
+    for v in videos:
+        lang = v.get("language") or "?"
+        acc  = v.get("accessible")
+        log(f'[VIDEO] {v["video_index"]} "{v.get("title","")}" {v.get("duration_seconds","?")}s accessible={acc} lang={lang}')
+
+    if not has_enough:
+        shortfall = total_sec - balance_sec
+        log(f"ERROR: Not enough balance. Need {total_sec}s, have {balance_sec}s (short by {shortfall}s).")
+        sys.exit(2)
+
+    accessible = [v for v in videos if v.get("accessible") is not False]
+    skipped    = count - len(accessible)
+    if skipped:
+        log(f"[PLAYLIST] Skipping {skipped} inaccessible video(s)")
+
+    out_folder = os.path.join(os.getcwd(), f"playlist_{playlist_id}")
+    os.makedirs(out_folder, exist_ok=True)
+    log(f"[PLAYLIST] Output folder: {out_folder}")
+
+    completed = 0
+    failed    = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {
+            pool.submit(_process_video, v, out_folder, has_diarize, has_word_ts,
+                        is_hebrew, min_speakers, max_speakers, output_format): v["video_index"]
+            for v in accessible
+        }
+        for future in concurrent.futures.as_completed(futures):
+            if future.result():
+                completed += 1
+            else:
+                failed += 1
+
+    log(f"[PLAYLIST_DONE] folder={out_folder} {completed}/{len(accessible)} completed"
+        + (f" ({failed} failed)" if failed else ""))
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="TextOps transcription")
+    parser.add_argument("--balance", action="store_true",
+                        help="Check remaining transcription balance and exit")
+    parser.add_argument("--playlist", default=None,
+                        help="YouTube playlist URL — transcribe all accessible videos into a folder")
     parser.add_argument("--file", default=None, help="Local file path or URL")
     parser.add_argument("--job-id", default=None,
                         help="Resume from existing Job ID (skip upload/submit)")
@@ -325,8 +443,12 @@ def main():
                         help="With --job-id: poll once. Exit 0=done (files saved), 3=still processing, 1=error")
     args = parser.parse_args()
 
-    if not args.file and not args.job_id:
-        log("ERROR: Required: --file or --job-id")
+    if args.balance:
+        get_balance()
+        sys.exit(0)
+
+    if not args.file and not args.job_id and not args.playlist:
+        log("ERROR: Required: --file, --job-id, --playlist, or --balance")
         sys.exit(1)
 
     global _start_time
@@ -344,6 +466,11 @@ def main():
     min_speakers     = args.min_speakers
     max_speakers     = args.max_speakers
     output_format = args.output_format
+
+    if args.playlist:
+        transcribe_playlist(args.playlist, has_diarize, has_word_ts, is_hebrew,
+                            min_speakers, max_speakers, output_format)
+        sys.exit(0)
 
     # ── determine output path ─────────────────────────────────────────────────
     if args.output_path:

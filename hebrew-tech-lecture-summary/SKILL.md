@@ -4,7 +4,7 @@ description: Summarize any content — lectures, meetings, articles, transcripti
 license: MIT
 compatibility: "Designed for Claude Code. No external dependencies required."
 metadata:
-  version: "1.1.2"
+  version: "1.1.3"
   author: "TextOps"
   tags: "summary, lecture, hebrew, meeting-notes, transcription, article"
   language: "he"

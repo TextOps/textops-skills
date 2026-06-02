@@ -4,7 +4,7 @@ description: Transcribe audio or video files using the TextOps API. Use this ski
 license: MIT
 compatibility: "Designed for Claude Code. Requires Python 3.8+, TEXTOPS_API_KEY (via textops_settings.json or environment variable), and internet access. Optional: ffprobe (time estimates), yt-dlp (auto-installed for YouTube)."
 metadata:
-  version: "1.1.2"
+  version: "1.1.6"
   author: "TextOps"
   tags: "transcription, speech-to-text, audio, video, hebrew, diarization, youtube"
   language: "he"
@@ -18,6 +18,8 @@ If the user asks what this skill can do (e.g. "מה אתה יכול לעשות?"
 > **TextOps Transcription Skill — מה אני יכול לעשות:**
 > - תמלול קבצי אודיו/וידאו (mp3, mp4, wav, m4a, ועוד)
 > - תמלול מ-YouTube (הורדה אוטומטית)
+> - תמלול פלייליסט YouTube שלם — כל סרטון לקובץ נפרד, 4 במקביל, בתיקייה ייעודית
+> - בדיקת יתרה (כמה שניות תמלול נשארו לך)
 > - תמיכה בעברית (ברירת מחדל) ובשפות נוספות (אנגלית, ערבית, צרפתית, ועוד)
 > - זיהוי דוברים אוטומטי (עד 3 דוברים)
 > - timestamps ברמת מילה
@@ -107,11 +109,66 @@ Then continue to Step 1.
 
 ---
 
+## Step 0.5: Balance check
+
+If the user asks about their remaining balance (e.g. "כמה נשאר לי?", "balance", "יתרה", "how much balance do I have?", "כמה שניות נשארו?"):
+
+```bash
+python "<skill_dir>/scripts/transcribe.py" --balance
+```
+
+Read the `[BALANCE] X seconds remaining (~Y minutes)` line and tell the user:
+> "Balance: X seconds remaining (~Y minutes)"
+
+Then stop — do not proceed to transcription.
+
+---
+
 ## Step 1: Gather info from the user
 
 If the user didn't provide a file yet, ask for it. Once you have the file:
 
-- If the URL contains `youtube.com` or `youtu.be` → tell the user: `"Detected YouTube — sending to cloud for processing..."` and proceed directly to **Step 2** with the URL as-is. The cloud handles YouTube natively and also returns duration timing. Only go to **Step 1.5** if Step 2 fails.
+### Playlist detection (explicit only)
+
+Only enter playlist mode when the user **explicitly** asks to transcribe a full playlist — e.g.:
+- "תמלל את הפלייליסט"
+- "transcribe this playlist"
+- "כל הסרטונים בפלייליסט"
+- "תמלל את כל הסרטונים"
+
+**Do NOT enter playlist mode** if the user sends a YouTube URL that contains `list=` but asks to transcribe "this video" / "הסרטון הזה" — treat it as a single video and ignore the `list=` parameter.
+
+When playlist mode is explicitly requested, run:
+
+```bash
+python "<skill_dir>/scripts/transcribe.py" \
+  --playlist "<url>" \
+  [--diarization false] \
+  [--max-speakers N] \
+  [--is-hebrew false]
+```
+
+Diarization, speaker count, language, and all other flags apply to the entire playlist unless the user specified otherwise. **Do not ask.**
+
+The script prints these tags — relay them to the user in real time:
+
+| Tag | What to tell the user |
+|---|---|
+| `[PLAYLIST] count=N total=Xs balance=Ys enough=true/false` | "Playlist: N videos, total X seconds. Balance: Y seconds." |
+| `[VIDEO] N "Title" Xs accessible=true/false lang=XX` | Show a summary list once all videos are printed |
+| `[PLAYLIST] Skipping K inaccessible video(s)` | "Skipping K inaccessible video(s)" |
+| `[PLAYLIST] Output folder: /path/...` | "Output folder: /path/..." |
+| `[V{N}] Starting: "Title"` | "Starting: Title" |
+| `[V{N}] Done: "Title"` | "Done: Title" |
+| `[V{N}] ERROR: ...` | Show the error |
+| `[PLAYLIST_DONE] folder=... N/M completed` | "Done! N/M videos transcribed. Folder: ..." |
+| `ERROR: Not enough balance. Need Xs, have Ys (short by Zs).` | "Not enough balance to transcribe the full playlist. See details above." |
+
+**After playlist mode completes — stop.** Do not continue to Step 2.
+
+---
+
+- If the URL contains `youtube.com` or `youtu.be` (single video, not playlist mode) → tell the user: `"Detected YouTube — sending to cloud for processing..."` and proceed directly to **Step 2** with the URL as-is. The cloud handles YouTube natively and also returns duration timing. Only go to **Step 1.5** if Step 2 fails.
 
 **Don't ask about speakers** — infer from context:
 
