@@ -65,10 +65,10 @@ API_KEY = _load_api_key()
 
 
 
-GET_UPLOAD_URL        = "https://text-ops-subs.com/api/v2/upload-url"
+GET_UPLOAD_URL        = "https://get-upload-signed-url-hjqzix372q-uc.a.run.app"
 SUBMIT_MODAL_URL      = "https://text-ops-subs.com/api/v2/transcribe"
 CHECK_JOB_URL         = "https://text-ops-subs.com/api/v2/transcribe-status"
-BALANCE_URL           = "https://text-ops-subs.com/api/v2/balance"
+BALANCE_URL           = "https://us-central1-whisper-cloud-functions.cloudfunctions.net/get_user_balance"
 PLAYLIST_ESTIMATE_URL = "https://text-ops-subs.com/api/v2/playlist-estimate"
 
 SECS_PER_MIN     = 0.83   # 1 min of audio ≈ 0.83s → 1h file: first check ~40s (no diarization)
