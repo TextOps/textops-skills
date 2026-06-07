@@ -4,7 +4,7 @@ description: FFmpeg operations in natural language with best practices built-in.
 license: MIT
 compatibility: "Designed for Claude Code. Requires FFmpeg installed on the system. Python 3.7+ required for the helper script."
 metadata:
-  version: "1.0.12"
+  version: "1.0.13"
   author: "TextOps"
   tags: "ffmpeg, video, audio, conversion, trimming, compression, resizing, media"
 ---
