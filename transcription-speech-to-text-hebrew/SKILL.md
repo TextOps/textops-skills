@@ -84,7 +84,7 @@ Read the output tag and act:
 > "⚠️ גרסה חדשה של הסקיל זמינה (X → Y).
 > מומלץ לעדכן לפני שממשיכים:
 > ```
-> npx skills add https://github.com/textops/transcription-speech-to-text-hebrew --skill transcription-speech-to-text-hebrew
+> npx -y skills add https://github.com/textops/transcription-speech-to-text-hebrew --skill transcription-speech-to-text-hebrew -g
 > ```
 > ממשיך בכל זאת עם הגרסה הנוכחית..."
 
@@ -92,7 +92,7 @@ Read the output tag and act:
 > "❤️ גרסה חדשה מומלצת בחום (X → Y).
 > הגרסה הזו כוללת שיפורים משמעותיים — מומלץ בחום לעדכן:
 > ```
-> npx skills add https://github.com/textops/transcription-speech-to-text-hebrew --skill transcription-speech-to-text-hebrew
+> npx -y skills add https://github.com/textops/transcription-speech-to-text-hebrew --skill transcription-speech-to-text-hebrew -g
 > ```
 > ממשיך בכל זאת עם הגרסה הנוכחית..."
 
@@ -102,7 +102,7 @@ Then continue to Step 1.
 > "🚫 הגרסה המותקנת שלך (X) אינה תואמת לשירות (מינימום: Y).
 > יש לעדכן את הסקיל לפני שניתן להמשיך:
 > ```
-> npx skills add https://github.com/textops/transcription-speech-to-text-hebrew --skill transcription-speech-to-text-hebrew
+> npx -y skills add https://github.com/textops/transcription-speech-to-text-hebrew --skill transcription-speech-to-text-hebrew -g
 > ```"
 
 **Stop** — do not continue until the user confirms they updated.
