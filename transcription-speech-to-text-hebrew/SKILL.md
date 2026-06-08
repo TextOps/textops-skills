@@ -21,7 +21,7 @@ If the user asks what this skill can do (e.g. "מה אתה יכול לעשות?"
 > - תמלול פלייליסט YouTube שלם — כל סרטון לקובץ נפרד, 4 במקביל, בתיקייה ייעודית
 > - בדיקת יתרה (כמה שניות תמלול נשארו לך)
 > - תמיכה בעברית (ברירת מחדל) ובשפות נוספות (אנגלית, ערבית, צרפתית, ועוד)
-> - זיהוי דוברים אוטומטי (עד 3 דוברים)
+> - זיהוי דוברים אוטומטי (עד 5 דוברים)
 > - timestamps ברמת מילה
 > - שמירת תוצאות כ-.txt וכ-.json
 > - המרת JSON קיים ל-text
@@ -179,7 +179,6 @@ python "<skill_dir>/scripts/transcribe.py" \
   --file "<video_url>" \
   --output-path "<folder_name>/<index>_<sanitized_title>_transcript" \
   [--diarization false] \
-  [--max-speakers N] \
   --is-hebrew true|false
 ```
 
@@ -193,17 +192,14 @@ When all done: "Done! N/M videos transcribed. Folder: <folder_name>"
 
 - If the URL contains `youtube.com` or `youtu.be` (single video, not playlist mode) → tell the user: `"Detected YouTube — sending to cloud for processing..."` and proceed directly to **Step 2** with the URL as-is. The cloud handles YouTube natively and also returns duration timing. Only go to **Step 1.5** if Step 2 fails.
 
-**Don't ask about speakers** — infer from context:
+**Don't ask anything** — infer from what the user already said:
 
-- If the filename, title, or user description strongly suggests a single speaker
-  (e.g. "הרצאה", "lecture", "monologue", "speech", "שיעור", "דרשה",
-  or user says "דובר אחד" / "רק אני" / "single speaker") → `--diarization false`
-- If user explicitly states a count (e.g. "יש 3 דוברים") → `--max-speakers 3`
-- Otherwise → omit diarization flags entirely (API auto-detects, up to 3 speakers)
+- If the user said it's a single speaker (e.g. "הרצאה", "lecture", "monologue", "speech", "שיעור", "דרשה", "דובר אחד", "רק אני", "single speaker") → add `--diarization false`
+- Otherwise → omit `--diarization` entirely (API auto-detects speakers)
 
 **Language:**
 - Default: assume Hebrew — do **not** add any language flag.
-- If the user says the audio is in a non-Hebrew language (e.g. "זה באנגלית", "it's in English", "not Hebrew") → add `--is-hebrew false`
+- If the user says the audio is not in Hebrew (e.g. "זה באנגלית", "it's in English", "not Hebrew") → add `--is-hebrew false`
 
 **Other flags:**
 - "timestamps פר מילה", "word level", "כתוביות מדויקות" → `--word-timestamps true` (slower)
@@ -264,15 +260,15 @@ Run with `--submit-only` — uploads the file, submits the job, then **exits imm
 python "<skill_dir>/scripts/transcribe.py" \
   --file "<path_or_url>" \
   [--diarization false] \
-  [--max-speakers N] \
   [--is-hebrew false] \
+  [--word-timestamps true] \
   --submit-only
 ```
 
 `--file` accepts both local file paths and HTTP/HTTPS URLs.
 `--diarization false` — only when single speaker was inferred (see Step 1).
-`--max-speakers N` — only when user explicitly stated a speaker count.
 `--is-hebrew false` — only when user indicated the audio is not in Hebrew (see Step 1).
+`--word-timestamps true` — only when user requested word-level timestamps (see Step 1).
 
 **Hebrew filenames are fully supported.**
 
@@ -445,7 +441,6 @@ Run with `--job-id` to re-fetch and inspect the raw `.json` output for where the
 ## Notes
 
 - The API handles Hebrew and other languages automatically
-- Speaker detection is automatic — no need to specify speaker count
+- Speaker detection is fully automatic — no need to specify speaker count (detects up to 5 speakers)
 - If you know it's a single speaker, say so — it skips speaker detection entirely and is faster
-- To cap the speaker search, pass --max-speakers N (default: up to 5)
 - The Job ID is printed at submission — save it in case you need to recover

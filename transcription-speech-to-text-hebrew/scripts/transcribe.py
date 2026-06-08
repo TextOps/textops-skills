@@ -164,14 +164,13 @@ def upload_file(upload_url, file_path, filename):
 
 # ── submit + poll ─────────────────────────────────────────────────────────────
 
-def submit_job(download_url, has_diarization, word_timestamps=False, min_speakers=1, max_speakers=10, is_hebrew=True):
+def submit_job(download_url, has_diarization, word_timestamps=False, is_hebrew=True):
     params = {
-        "enable_diarization": has_diarization,
-        "min_speakers": min_speakers,
-        "max_speakers": max_speakers,
         "word_timestamps": word_timestamps,
         "is_hebrew": is_hebrew,
     }
+    if has_diarization is False:
+        params["enable_diarization"] = False
     log("[JOB] Submitting...")
     for attempt in range(1, 4):
         res = requests.post(SUBMIT_MODAL_URL,
@@ -375,10 +374,6 @@ def main():
                         help="Resume from existing Job ID (skip upload/submit)")
     parser.add_argument("--diarization", default="auto",
                         help="Enable speaker separation: true / false / auto (default: auto — server detects)")
-    parser.add_argument("--min-speakers", type=int, default=1,
-                        help="Minimum number of speakers (used with diarization)")
-    parser.add_argument("--max-speakers", type=int, default=10,
-                        help="Maximum number of speakers (used with diarization)")
     parser.add_argument("--word-timestamps", default="false",
                         help="Word-level timestamps (slower): true/false")
     parser.add_argument("--is-hebrew", default="true",
@@ -411,10 +406,8 @@ def main():
         has_diarize = False
     else:
         has_diarize = None   # auto — sends null to API → server auto-detects speakers
-    has_word_ts      = args.word_timestamps.lower() in ("true", "1", "yes")
-    is_hebrew        = args.is_hebrew.lower() not in ("false", "0", "no")
-    min_speakers     = args.min_speakers
-    max_speakers     = args.max_speakers
+    has_word_ts   = args.word_timestamps.lower() in ("true", "1", "yes")
+    is_hebrew     = args.is_hebrew.lower() not in ("false", "0", "no")
     output_format = args.output_format
 
     if args.playlist:
@@ -496,7 +489,7 @@ def main():
         poll_interval = POLL_INTERVAL
         max_polls     = MAX_POLLS
 
-        job_id, server_duration = submit_job(download_url, has_diarize, has_word_ts, min_speakers, max_speakers, is_hebrew)
+        job_id, server_duration = submit_job(download_url, has_diarize, has_word_ts, is_hebrew)
 
         # For URLs (e.g. YouTube), local duration is unknown — use server-returned duration
         if initial_wait is None and server_duration:
