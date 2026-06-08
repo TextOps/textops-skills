@@ -64,12 +64,12 @@ def _load_api_key():
 API_KEY = _load_api_key()
 
 
-
+# this is tmp, problems with google... 
 GET_UPLOAD_URL        = "https://get-upload-signed-url-hjqzix372q-uc.a.run.app"
-SUBMIT_MODAL_URL      = "https://text-ops-subs.com/api/v2/transcribe"
-CHECK_JOB_URL         = "https://text-ops-subs.com/api/v2/transcribe-status"
+SUBMIT_MODAL_URL      = "https://us-central1-whisper-cloud-functions.cloudfunctions.net/submit_modal_job"
+CHECK_JOB_URL         = "https://us-central1-whisper-cloud-functions.cloudfunctions.net/check_modal_job"
 BALANCE_URL           = "https://us-central1-whisper-cloud-functions.cloudfunctions.net/get_user_balance"
-PLAYLIST_ESTIMATE_URL = "https://text-ops-subs.com/api/v2/playlist-estimate"
+PLAYLIST_ESTIMATE_URL = "https://us-central1-whisper-cloud-functions.cloudfunctions.net/get_playlist_estimate"
 
 SECS_PER_MIN     = 0.83   # 1 min of audio ≈ 0.83s → 1h file: first check ~40s (no diarization)
 DIARIZATION_MULT = 2.25   # diarization ×2.25 → 1h file: first check ~90s
