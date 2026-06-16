@@ -4,7 +4,7 @@ description: Transcribe audio or video files using the TextOps API. Use this ski
 license: MIT
 compatibility: "Designed for Claude Code. Requires Python 3.8+, TEXTOPS_API_KEY (via textops_settings.json or environment variable), and internet access. Optional: ffprobe (time estimates), yt-dlp (auto-installed for YouTube)."
 metadata:
-  version: "1.1.13"
+  version: "1.1.15"
   author: "TextOps"
   tags: "transcription, speech-to-text, audio, video, hebrew, diarization, youtube"
   language: "he"
@@ -124,6 +124,20 @@ Then stop — do not proceed to transcription.
 
 ---
 
+## Step 0.7: Read user settings
+
+Read `<skill_dir>/textops_settings.json` and extract these values (use the defaults below if the file is missing or a field is absent):
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `language` | `"he"` | `"he"` = Hebrew model; any other code = multilingual model |
+| `num_speakers` | `1` | `1` = single speaker (no diarization); `2`–`5` = known speaker count; `null` = auto-detect |
+| `word_timestamps` | `false` | `true` = word-level timestamps (slower); `false` = segment-level |
+
+Save as `<cfg_language>`, `<cfg_num_speakers>`, `<cfg_word_timestamps>`. These become the defaults for the current transcription — the user's explicit request always overrides them.
+
+---
+
 ## Step 1: Gather info from the user
 
 If the user didn't provide a file yet, ask for it. Once you have the file:
@@ -192,17 +206,22 @@ When all done: "Done! N/M videos transcribed. Folder: <folder_name>"
 
 - If the URL contains `youtube.com` or `youtu.be` (single video, not playlist mode) → tell the user: `"Detected YouTube — sending to cloud for processing..."` and proceed directly to **Step 2** with the URL as-is. The cloud handles YouTube natively and also returns duration timing. Only go to **Step 1.5** if Step 2 fails.
 
-**Don't ask anything** — infer from what the user already said:
+**Don't ask anything** — infer from what the user already said. The user's explicit statement always overrides `textops_settings.json`.
 
-- If the user said it's a single speaker (e.g. "הרצאה", "lecture", "monologue", "speech", "שיעור", "דרשה", "דובר אחד", "רק אני", "single speaker") → add `--diarization false`
-- Otherwise → omit `--diarization` entirely (API auto-detects speakers)
+**Speaker diarization** (resolved in priority order):
+1. User stated a number explicitly (e.g. "יש כאן 2 דוברים", "3 speakers", "מרובה דוברים") → use that number: 1→`--diarization false`, 2+→`--diarization true`
+2. User said single speaker (e.g. "הרצאה", "lecture", "monologue", "speech", "שיעור", "דרשה", "דובר אחד", "רק אני", "single speaker") → `--diarization false`
+3. User said multiple speakers without specifying how many → `--diarization true`
+4. No mention → use `<cfg_num_speakers>`: `1`→`--diarization false` / `2+`→`--diarization true` / `null`→omit flag (API auto-detects)
 
-**Language:**
-- Default: assume Hebrew — do **not** add any language flag.
-- If the user says the audio is not in Hebrew (e.g. "זה באנגלית", "it's in English", "not Hebrew") → add `--is-hebrew false`
+**Language** (resolved in priority order):
+1. User said the audio is not in Hebrew (e.g. "זה באנגלית", "it's in English", "not Hebrew", "זה בערבית") → `--is-hebrew false`
+2. User said it is Hebrew → `--is-hebrew true`
+3. No mention → use `<cfg_language>`: `"he"`→`--is-hebrew true` / other→`--is-hebrew false`
 
-**Other flags:**
-- "timestamps פר מילה", "word level", "כתוביות מדויקות" → `--word-timestamps true` (slower)
+**Word-level timestamps** (resolved in priority order):
+1. User requested word timestamps (e.g. "timestamps פר מילה", "word level", "כתוביות מדויקות") → `--word-timestamps true`
+2. No mention → use `<cfg_word_timestamps>`: `true`→`--word-timestamps true` / `false`→omit flag
 
 **Never ask about output format** — always `--output-format text`.
 
@@ -278,16 +297,36 @@ The script checks for the key automatically — first in `textops_settings.json`
 
 If the script exits with a missing-key error, say:
 
-> "כדי להשתמש בשירות התמלול צריך מפתח API.
-> 👉 קבל מפתח כאן: https://agents.text-ops-subs.com
+> "ברוך הבא לסקיל התמלול של TextOps! 🎙️
 >
-> **אפשרות 1 — textops_settings.json (הכי פשוט):**
-> פתח את הקובץ `textops_settings.json` שנמצא בתיקיית הסקיל, והחלף את `YOUR_API_KEY_HERE` במפתח שלך.
+> לפני שמתחילים, פתח את הקובץ `textops_settings.json` בתיקיית הסקיל — שם תמצא את כל ההגדרות:
 >
-> **אפשרות 2 — משתנה סביבה:**
-> - **Windows (Command Prompt):** `setx TEXTOPS_API_KEY "your_key"` — ואז פתח טרמינל חדש
-> - **Windows (PowerShell):** `[System.Environment]::SetEnvironmentVariable('TEXTOPS_API_KEY','your_key','User')`
-> - **Mac/Linux:** הוסף `export TEXTOPS_API_KEY="your_key"` לקובץ `~/.zshrc` ואז `source ~/.zshrc`"
+> **TEXTOPS_API_KEY** — מפתח ה-API שלך (חובה)
+> קבל כאן: https://agents.text-ops-subs.com
+> החלף את `YOUR_API_KEY_HERE` במפתח שקיבלת.
+>
+> ---
+>
+> **ההגדרות האחרות אופציונליות** — כבר הוגדרו עם ברירות מחדל מהירות:
+>
+> **`language`** — שפת האודיו (ברירת מחדל: `"he"`)
+> - `"he"` — מודל עברית מותאם (מדויק ומהיר יותר לעברית)
+> - `"en"`, `"ar"`, `"fr"` וכו' — מודל רב-לשוני לכל שפה אחרת
+> - אפשר לשנות גם בזמן אמת ("זה באנגלית" — ואני אתאים)
+>
+> **`num_speakers`** — כמות דוברים (ברירת מחדל: `1`)
+> - `1` — דובר יחיד: **מהיר יותר**, אין הפרדת דוברים
+> - `2`–`5` — מרובה דוברים: כל דובר מסומן בנפרד, **לוקח ~פי 2.25 זמן**
+> - `null` — זיהוי אוטומטי (כשלא יודעים מראש)
+> - אפשר לשנות בזמן אמת ("יש כאן 2 דוברים" — ואני אתאים)
+>
+> **`word_timestamps`** — חותמות זמן (ברירת מחדל: `false`)
+> - `false` — timestamps ברמת משפט (מהיר)
+> - `true` — timestamp לכל מילה בנפרד — שימושי לכתוביות מדויקות, **איטי יותר**
+> - אפשר לשנות בזמן אמת ("אני רוצה timestamps פר מילה" — ואני אתאים)
+>
+> ---
+> אחרי שהכנסת את המפתח, פשוט שלח לי את הקובץ לתמלול ונתחיל!"
 
 If the user provides the API key directly in the chat, write it into `textops_settings.json` (replace `YOUR_API_KEY_HERE`) and confirm: "שמרתי את המפתח ב-textops_settings.json — מתחיל תמלול."
 

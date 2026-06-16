@@ -64,6 +64,24 @@ def _load_api_key():
 API_KEY = _load_api_key()
 
 
+def _load_settings():
+    settings_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "textops_settings.json",
+    )
+    result = {"language": "he", "num_speakers": 1, "word_timestamps": False}
+    if os.path.isfile(settings_path):
+        try:
+            with open(settings_path, encoding="utf-8") as f:
+                data = json.load(f)
+            for k in result:
+                if k in data:
+                    result[k] = data[k]
+        except Exception:
+            pass
+    return result
+
+
 # this is tmp, problems with google... 
 GET_UPLOAD_URL        = "https://get-upload-signed-url-hjqzix372q-uc.a.run.app"
 SUBMIT_MODAL_URL      = "https://us-central1-whisper-cloud-functions.cloudfunctions.net/submit_modal_job"
@@ -364,6 +382,17 @@ def print_playlist_info(playlist_url):
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    _s = _load_settings()
+    _ns = _s.get("num_speakers", 1)
+    if _ns is None:
+        _diar_default = "auto"
+    elif _ns == 1:
+        _diar_default = "false"
+    else:
+        _diar_default = "true"
+    _wt_default  = "true" if _s.get("word_timestamps") else "false"
+    _heb_default = "true" if _s.get("language", "he") == "he" else "false"
+
     parser = argparse.ArgumentParser(description="TextOps transcription")
     parser.add_argument("--balance", action="store_true",
                         help="Check remaining transcription balance and exit")
@@ -372,12 +401,12 @@ def main():
     parser.add_argument("--file", default=None, help="Local file path or URL")
     parser.add_argument("--job-id", default=None,
                         help="Resume from existing Job ID (skip upload/submit)")
-    parser.add_argument("--diarization", default="auto",
-                        help="Enable speaker separation: true / false / auto (default: auto — server detects)")
-    parser.add_argument("--word-timestamps", default="false",
-                        help="Word-level timestamps (slower): true/false")
-    parser.add_argument("--is-hebrew", default="true",
-                        help="Route to Hebrew model (true, default) or multilingual model (false)")
+    parser.add_argument("--diarization", default=_diar_default,
+                        help="Enable speaker separation: true / false / auto (default: from textops_settings.json)")
+    parser.add_argument("--word-timestamps", default=_wt_default,
+                        help="Word-level timestamps (slower): true/false (default: from textops_settings.json)")
+    parser.add_argument("--is-hebrew", default=_heb_default,
+                        help="Route to Hebrew model (true) or multilingual model (false) (default: from textops_settings.json)")
     parser.add_argument("--output-format", default="json",
                         choices=["json", "text"], help="Output format")
     parser.add_argument("--output-path", default=None,
