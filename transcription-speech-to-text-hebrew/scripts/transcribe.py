@@ -106,6 +106,7 @@ SOCIAL_MEDIA_HOSTNAMES = {
 _SOCIAL_VIDEO_PATTERNS = [
     re.compile(r"facebook\.com/.+/videos/"),
     re.compile(r"facebook\.com/watch"),
+    re.compile(r"facebook\.com/reel/"),
     re.compile(r"fb\.watch/"),
     re.compile(r"instagram\.com/(p|reel|tv)/"),
     re.compile(r"(twitter|x)\.com/\w+/status/\d+"),
