@@ -1,12 +1,12 @@
 ---
 name: transcription-speech-to-text-hebrew
-description: Transcribe audio or video files using the TextOps API. Use this skill whenever the user wants to transcribe a video or audio file, mentions an mp4/mp3/wav/m4a file and wants text out of it, asks for transcription or תמלול, or wants to convert spoken audio to text. Always trigger this skill even if the user just says "תמלל את זה" or "I want to transcribe this file". Also trigger this skill when the user asks what this skill can do, what features it has, "מה אתה יכול לעשות?", "what can you do?", or any similar capability question.
+description: Transcribe audio or video files using the TextOps API. Use this skill whenever the user wants to transcribe a video or audio file, mentions an mp4/mp3/wav/m4a file and wants text out of it, asks for transcription or תמלול, or wants to convert spoken audio to text. Also triggers for YouTube, Facebook, Instagram, and Twitter/X links. Always trigger this skill even if the user just says "תמלל את זה" or "I want to transcribe this file". Also trigger this skill when the user asks what this skill can do, what features it has, "מה אתה יכול לעשות?", "what can you do?", or any similar capability question.
 license: MIT
-compatibility: "Designed for Claude Code. Requires Python 3.8+, TEXTOPS_API_KEY (via textops_settings.json or environment variable), and internet access. Optional: ffprobe (time estimates), yt-dlp (auto-installed for YouTube)."
+compatibility: "Designed for Claude Code. Requires Python 3.8+, TEXTOPS_API_KEY (via textops_settings.json or environment variable), and internet access. Optional: ffprobe (time estimates), yt-dlp (auto-installed for YouTube and social media)."
 metadata:
   version: "1.1.15"
   author: "TextOps"
-  tags: "transcription, speech-to-text, audio, video, hebrew, diarization, youtube"
+  tags: "transcription, speech-to-text, audio, video, hebrew, diarization, youtube, facebook, instagram, twitter, social-media"
   language: "he"
   requires_api_key: "TEXTOPS_API_KEY"
 ---
@@ -18,6 +18,7 @@ If the user asks what this skill can do (e.g. "מה אתה יכול לעשות?"
 > **TextOps Transcription Skill — מה אני יכול לעשות:**
 > - תמלול קבצי אודיו/וידאו (mp3, mp4, wav, m4a, ועוד)
 > - תמלול מ-YouTube (הורדה אוטומטית)
+> - תמלול מ-Facebook, Instagram, Twitter/X (הורדה אוטומטית)
 > - תמלול פלייליסט YouTube שלם — כל סרטון לקובץ נפרד, 4 במקביל, בתיקייה ייעודית
 > - בדיקת יתרה (כמה שניות תמלול נשארו לך)
 > - תמיכה בעברית (ברירת מחדל) ובשפות נוספות (אנגלית, ערבית, צרפתית, ועוד)
@@ -206,6 +207,13 @@ When all done: "Done! N/M videos transcribed. Folder: <folder_name>"
 
 - If the URL contains `youtube.com` or `youtu.be` (single video, not playlist mode) → tell the user: `"Detected YouTube — sending to cloud for processing..."` and proceed directly to **Step 2** with the URL as-is. The cloud handles YouTube natively and also returns duration timing. Only go to **Step 1.5** if Step 2 fails.
 
+- If the URL is a social media video link → tell the user: `"Detected social media video — sending to cloud for processing..."` and proceed directly to **Step 2** with the URL as-is. Only go to **Step 1.6** if Step 2 fails.
+
+  **Social media video URL patterns:**
+  - **Facebook**: hostname is `facebook.com`, `www.facebook.com`, `m.facebook.com`, or `fb.watch` — AND URL contains `/videos/`, `/watch`, or starts at `fb.watch/`
+  - **Instagram**: hostname is `instagram.com` or `www.instagram.com` — AND URL contains `/p/`, `/reel/`, or `/tv/`
+  - **Twitter/X**: hostname is `twitter.com`, `www.twitter.com`, `x.com`, or `www.x.com` — AND URL matches `/<username>/status/<numeric_id>`
+
 **Don't ask anything** — infer from what the user already said. The user's explicit statement always overrides `textops_settings.json`.
 
 **Speaker diarization** (resolved in priority order):
@@ -249,6 +257,36 @@ Read and act on these output tags:
 | `[AUDIO] Fetching audio...` | Tell user: "Downloading..." |
 | `[AUDIO] Updating yt-dlp and retrying...` | Tell user: "Updating yt-dlp and retrying..." |
 | `[FILE] /path/to/file.mp3` | **Save as `<downloaded_file>`**. Tell user (informational only — do not wait for confirmation): "Downloaded: `<filename>`" |
+| `ERROR: ...` | Show the error to the user and stop |
+
+On success: use `<downloaded_file>` as the input and continue from **Step 2** as a local file.
+
+---
+
+## Step 1.6: Social media — Fallback (local download)
+
+> Only when Step 2 fails for a social media URL (Facebook, Instagram, Twitter/X).
+
+Tell the user:
+> "Cloud could not access the video — downloading locally with yt-dlp..."
+
+**Script location**: `scripts/download_audio.py` is in the same directory as this SKILL.md file.
+
+```bash
+python "<skill_dir>/scripts/download_audio.py" "<social_media_url>"
+```
+
+yt-dlp supports Facebook, Instagram, Twitter/X, and many other platforms natively. It installs and updates automatically if needed.
+
+Read and act on these output tags:
+
+| Tag | Action |
+|---|---|
+| `[YTDLP] Installing...` | Tell user: "Installing yt-dlp..." |
+| `[YTDLP] Ready (version X)` | Tell user: "yt-dlp ready (version X)" |
+| `[AUDIO] Fetching audio...` | Tell user: "Downloading..." |
+| `[AUDIO] Updating yt-dlp and retrying...` | Tell user: "Updating yt-dlp and retrying..." |
+| `[FILE] /path/to/file.mp3` | **Save as `<downloaded_file>`**. Tell user (informational only): "Downloaded: `<filename>`" |
 | `ERROR: ...` | Show the error to the user and stop |
 
 On success: use `<downloaded_file>` as the input and continue from **Step 2** as a local file.
@@ -335,6 +373,7 @@ Wait for the user to confirm before continuing.
 **Possible errors from the server when submitting a URL:**
 - `ERROR: URL is not publicly accessible` →
   - If the URL is a YouTube link → go to **Step 1.5** (local download fallback).
+  - If the URL is a social media link (Facebook, Instagram, Twitter/X) → go to **Step 1.6** (local download fallback).
   - If Google Drive → set sharing to "Anyone with the link".
 - `ERROR: File format is not supported` → unsupported extension (e.g. `.docx`).
 

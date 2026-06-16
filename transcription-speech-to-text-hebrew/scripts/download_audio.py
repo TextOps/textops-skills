@@ -1,9 +1,10 @@
 """
-Downloads audio from a YouTube URL for the TextOps transcription skill.
+Downloads audio from a YouTube or social media URL for the TextOps transcription skill.
 
 Usage:
-  python download_audio.py <youtube_url>
+  python download_audio.py <url>
 
+Supports YouTube, Facebook, Instagram, Twitter/X, and any other yt-dlp-supported platform.
 Extracts audio-only (native format, no re-encoding) to the current working directory.
 Installs / updates yt-dlp automatically if needed.
 Exits 0 on success, 1 on failure.
@@ -148,7 +149,7 @@ def download(url):
 
 def main():
     if len(sys.argv) < 2:
-        log("Usage: python download_audio.py <youtube_url>")
+        log("Usage: python download_audio.py <url>")
         sys.exit(1)
 
     url = sys.argv[1]

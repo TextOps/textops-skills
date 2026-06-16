@@ -9,6 +9,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import requests
@@ -97,6 +98,49 @@ SMALL_DURATION_SEC = 1200 # threshold in seconds = 20 min (URL files)
 MAX_FILE_MB      = 2048   # 2 GB upload limit
 MAX_POLLS        = 180    # 180 × 5s = 15 min max
 
+SOCIAL_MEDIA_HOSTNAMES = {
+    "facebook.com", "www.facebook.com", "m.facebook.com", "fb.watch",
+    "instagram.com", "www.instagram.com",
+    "twitter.com", "www.twitter.com", "x.com", "www.x.com",
+}
+_SOCIAL_VIDEO_PATTERNS = [
+    re.compile(r"facebook\.com/.+/videos/"),
+    re.compile(r"facebook\.com/watch"),
+    re.compile(r"fb\.watch/"),
+    re.compile(r"instagram\.com/(p|reel|tv)/"),
+    re.compile(r"(twitter|x)\.com/\w+/status/\d+"),
+]
+
+
+def is_social_media_url(url):
+    from urllib.parse import urlparse
+    host = urlparse(url).netloc.lower()
+    if host not in SOCIAL_MEDIA_HOSTNAMES:
+        return False
+    return any(p.search(url) for p in _SOCIAL_VIDEO_PATTERNS)
+
+
+def _social_basename(url):
+    from urllib.parse import urlparse, parse_qs
+    parsed = urlparse(url)
+    host   = parsed.netloc.lower()
+    path   = parsed.path
+    if "instagram" in host:
+        m = re.search(r"/(p|reel|tv)/([^/]+)", path)
+        return f"instagram_{m.group(1)}_{m.group(2)}" if m else "instagram"
+    if "facebook" in host or "fb.watch" in host:
+        m = re.search(r"/videos/(\d+)", path)
+        if m:
+            return f"facebook_video_{m.group(1)}"
+        v = parse_qs(parsed.query).get("v", [None])[0]
+        if v:
+            return f"facebook_video_{v}"
+        slug = re.sub(r"[^a-zA-Z0-9]", "_", path.strip("/"))
+        return f"facebook_{slug[:30]}" if slug else "facebook"
+    if "twitter" in host or host in ("x.com", "www.x.com"):
+        m = re.search(r"/status/(\d+)", path)
+        return f"tweet_{m.group(1)}" if m else "tweet"
+    return "social"
 
 
 _start_time = None
@@ -491,8 +535,11 @@ def main():
 
         if is_url:
             from urllib.parse import urlparse
-            url_basename = os.path.basename(urlparse(file_arg).path) or "audio"
-            base = os.path.splitext(url_basename)[0] or "transcript"
+            if is_social_media_url(file_arg):
+                base = _social_basename(file_arg)
+            else:
+                url_basename = os.path.basename(urlparse(file_arg).path) or "audio"
+                base = os.path.splitext(url_basename)[0] or "transcript"
             if not output_path:
                 ext  = ".json" if output_format == "json" else ".txt"
                 output_path = os.path.join(os.getcwd(), base + "_transcript" + ext)
