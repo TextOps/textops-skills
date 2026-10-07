@@ -4,7 +4,7 @@ description: Transcribe audio or video files using the TextOps API. Use this ski
 license: MIT
 compatibility: "Designed for Claude Code. Requires Python 3.8+, TEXTOPS_API_KEY (via textops_settings.json or environment variable), and internet access. Optional: ffprobe (time estimates). YouTube and social media links are downloaded in the TextOps cloud — nothing is downloaded locally."
 metadata:
-  version: "1.1.19"
+  version: "1.1.20"
   author: "TextOps"
   tags: "transcription, speech-to-text, audio, video, hebrew, diarization, youtube, facebook, instagram, twitter, social-media"
   language: "he"
