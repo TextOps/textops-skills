@@ -370,8 +370,11 @@ Every following call is the same command with `--wait 20`. `--wait` replaces `sl
 |---|---|---|
 | `0` | `[DONE] ...` | Continue to Step 4 |
 | `3` | `[STATUS] processing X%` | Tell user: "מתמלל... X%", run again with `--wait 20` |
-| `3` | `[STATUS] summarizing` | Tell user: "התמלול מוכן, מסכם...", run again with `--wait 20` |
+| `4` | `[TRANSCRIPT_READY] Transcript saved — summary still running` | The transcript is ready — **don't make the user wait for the summary.** Report the `[FILE]` paths (as in Step 4) and tell the user: "התמלול מוכן ונשמר — אפשר כבר לעבוד איתו. הסיכום עדיין בהכנה, אעדכן כשהוא מוכן." Then keep polling with `--wait 20` |
+| `3` | `[STATUS] summarizing` | Summary still running, run again with `--wait 20` (no need to tell the user again) |
 | `1` | `ERROR: ...` | Go to Troubleshooting |
+
+**The summary never blocks the transcript.** In `both` mode the transcript (`.txt` + `.json`) is saved as soon as it's ready (exit `4`, only once); the summary `.md` follows on exit `0`. If the user asks to do something with the transcript in the meantime (read it, search it, write subtitles…), do it first, then resume the polling loop for the summary. In `summary` mode there is no transcript file, so exit `4` never happens.
 
 Keep the user updated, but don't repeat the same message on every call — report only when the percentage or the stage changes.
 
