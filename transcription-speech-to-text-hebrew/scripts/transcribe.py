@@ -291,7 +291,10 @@ def is_job_ready(data, want_summary):
     return True
 
 
-def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_POLLS, want_summary=False):
+def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_POLLS, want_summary=False,
+             on_transcript_ready=None):
+    """on_transcript_ready(data) is called once when the transcript is done but the
+    summary is still running, so the transcript can be saved without waiting."""
     if initial_wait is not None:
         log(f"[WAIT] First check in {initial_wait:.0f}s (estimated processing time)")
         time.sleep(initial_wait)
@@ -322,6 +325,8 @@ def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_PO
             if last_progress != "summary":
                 log(f"[SUMMARY] Transcript ready — summarizing... ({elapsed()}s elapsed)")
                 last_progress = "summary"
+                if on_transcript_ready:
+                    on_transcript_ready(data)
             time.sleep(poll_interval)
             continue
 
@@ -399,11 +404,26 @@ def save_summary(data, output_path):
         log("WARNING: No summary in the response (the server may not support summaries yet)")
 
 
+def transcript_txt_path(output_path):
+    return os.path.splitext(output_path)[0] + ".txt"
+
+
+def resolve_diarize(data, has_diarize):
+    if has_diarize is None:
+        speakers = set(s.get("speaker", "") for s in extract_segments(data) if s.get("speaker"))
+        return len(speakers) > 1
+    return has_diarize
+
+
 def save_output(data, output_path, has_diarize, output_format, output_mode="transcript"):
     if output_mode in ("summary", "both") or data.get("summary"):
         save_summary(data, output_path)
     if output_mode == "summary":
         return
+    save_transcript(data, output_path, has_diarize)
+
+
+def save_transcript(data, output_path, has_diarize):
     import subprocess
     json_path = os.path.splitext(output_path)[0] + ".json"
     os.makedirs(os.path.dirname(os.path.abspath(json_path)), exist_ok=True)
@@ -411,7 +431,7 @@ def save_output(data, output_path, has_diarize, output_format, output_mode="tran
     log(f"[FILE] JSON: {json_path} ({size:,} bytes)")
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    txt_path = os.path.splitext(output_path)[0] + ".txt"
+    txt_path = transcript_txt_path(output_path)
     result = subprocess.run(
         [sys.executable, os.path.join(script_dir, "json_to_text.py"),
          json_path, "--output", txt_path,
@@ -562,6 +582,11 @@ def main():
         ext  = ".json" if output_format == "json" else ".txt"
         output_path = os.path.join(os.getcwd(), base + "_transcript" + ext)
 
+    def early_transcript(data):
+        if output_mode == "both":
+            save_transcript(data, output_path, resolve_diarize(data, has_diarize))
+            log("[TRANSCRIPT_READY] Transcript saved — summary still running")
+
     # ── resume / check-once from existing job ID ─────────────────────────────
     if args.job_id:
         if args.check_once:
@@ -581,12 +606,15 @@ def main():
                 sys.exit(1)
             if is_job_ready(data, wants_summary(data, want_summary)):
                 log(f"[DONE] Processing complete ({elapsed()}s total)")
-                if has_diarize is None:
-                    _speakers = set(s.get("speaker", "") for s in extract_segments(data) if s.get("speaker"))
-                    has_diarize = len(_speakers) > 1
-                save_output(data, output_path, has_diarize, output_format, output_mode)
+                save_output(data, output_path, resolve_diarize(data, has_diarize), output_format, output_mode)
                 sys.exit(0)
             if data.get("status") == "done" and data.get("summary_status"):
+                # Transcript is ready, summary still running: hand the transcript over now
+                # (once), so the user can start working with it.
+                if output_mode != "summary" and not os.path.exists(transcript_txt_path(output_path)):
+                    save_transcript(data, output_path, resolve_diarize(data, has_diarize))
+                    log("[TRANSCRIPT_READY] Transcript saved — summary still running")
+                    sys.exit(4)
                 log("[STATUS] summarizing")
                 sys.exit(3)
             progress = data.get("progress", 0)
@@ -594,10 +622,9 @@ def main():
             sys.exit(3)
 
         log(f"[JOB] Resuming with existing Job ID: {args.job_id}")
-        data = poll_job(args.job_id, initial_wait=None, want_summary=want_summary)
-        if has_diarize is None:
-            _speakers = set(s.get("speaker", "") for s in extract_segments(data) if s.get("speaker"))
-            has_diarize = len(_speakers) > 1
+        data = poll_job(args.job_id, initial_wait=None, want_summary=want_summary,
+                        on_transcript_ready=early_transcript)
+        has_diarize = resolve_diarize(data, has_diarize)
     else:
         file_arg = args.file
         is_url   = file_arg.startswith("http://") or file_arg.startswith("https://")
@@ -648,10 +675,9 @@ def main():
             log(f"[TIMING] first_check={first_check}s poll_interval={poll_interval}s estimated_total={est_total}s")
             sys.exit(0)
 
-        data   = poll_job(job_id, initial_wait, poll_interval, max_polls, want_summary)
-        if has_diarize is None:
-            _speakers = set(s.get("speaker", "") for s in extract_segments(data) if s.get("speaker"))
-            has_diarize = len(_speakers) > 1
+        data   = poll_job(job_id, initial_wait, poll_interval, max_polls, want_summary,
+                          on_transcript_ready=early_transcript)
+        has_diarize = resolve_diarize(data, has_diarize)
 
     save_output(data, output_path, has_diarize, output_format, output_mode)
 
