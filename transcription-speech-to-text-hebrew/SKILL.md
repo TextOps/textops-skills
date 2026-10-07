@@ -189,7 +189,7 @@ For each video, build the output path:
 
 Determine `--is-hebrew` per video: `true` if `lang=he`, `false` for any other non-null lang, or use the playlist-level default if `lang=null`.
 
-Send **4 Bash calls in a single message** (in parallel), each running:
+Work in batches of 4. **Submit** the batch (4 Bash calls in a single message, each returns within seconds):
 
 ```bash
 python "<skill_dir>/scripts/transcribe.py" \
@@ -197,10 +197,13 @@ python "<skill_dir>/scripts/transcribe.py" \
   --output-path "<folder_name>/<index>_<sanitized_title>_transcript" \
   [--diarization false] \
   [--output-mode summary|both] \
-  --is-hebrew true|false
+  --is-hebrew true|false \
+  --submit-only
 ```
 
-Wait for all 4 to finish, then send the next batch of 4. Track progress and tell the user as each job completes: "Done: Title (N/total)"
+Save each `[JOB] ID:` with its output path. Then **poll** the batch with short checks, exactly as in Step 3 (`--check-once --wait 20`, one call per unfinished video, in parallel). Drop a video from the loop when it exits 0 or 1. When the whole batch is done, submit the next 4.
+
+Track progress and tell the user as each job completes: "Done: Title (N/total)"
 
 When all done: "Done! N/M videos transcribed. Folder: <folder_name>"
 
@@ -255,7 +258,7 @@ Scan the current conversation for any `[JOB] ID: <id>` output from a previous ru
 > "ראיתי שכבר שלחנו את הקובץ הזה לעיבוד בשיחה זו (Job ID: `abc123`).
 > אנסה לקבל את התוצאה — אם היא מוכנה נחסוך העלאה כפולה."
 
-Run with `--job-id <id>` to fetch the result. Only if that fails (job expired or not found) — continue to upload.
+Fetch the result with the short checks from Step 3 (`--job-id <id> --check-once`). Only if that fails (job expired or not found) — continue to upload.
 
 ## Step 2: Submit (Phase A)
 
@@ -348,58 +351,31 @@ Wait for the user to confirm before continuing.
 
 ## Step 3: Poll for result (Phase B)
 
-Choose the path based on your environment:
+**Always poll with short commands.** Never run one long command that waits for the whole job: transcription + summary can take several minutes, and long-running commands get cut off or rejected in many environments. Each call below finishes in under ~30 seconds.
 
-### Path A — Claude Code (recommended)
-
-First, load the Monitor tool schema (required before first use):
-```
-ToolSearch("select:Monitor")
-```
-
-Then use `run_in_background: true` on the Bash tool call, and use the Monitor tool to stream stdout line-by-line. Each tag arrives in real time.
+First call — wait `min(first_check, 25)` seconds (from `[TIMING]`), then check once:
 
 ```bash
 python "<skill_dir>/scripts/transcribe.py" \
   --job-id <job_id> \
+  --check-once --wait <min(first_check, 25)> \
   --output-path <base_path> \
   --diarization <true|false> \
   [--output-mode summary|both]
 ```
 
-Relay each line to the user as it arrives:
-
-| Output line | What to tell the user |
-|---|---|
-| `[WAIT] First check in Xs...` | "ממתין Xs לפני בדיקה ראשונה..." |
-| `[PROGRESS] X% (Ys elapsed)` | "מתמלל... X%" |
-| `[SUMMARY] Transcript ready — summarizing...` | "התמלול מוכן, מסכם..." |
-| `[DONE] Processing complete` | Continue to Step 4 |
-| `ERROR: ...` | Show error, go to Troubleshooting |
-
-### Path B — Other environments
-
-Use `--check-once` and loop — each call is a single HTTP check (short, non-blocking). Sleep `poll_interval` seconds between calls.
-
-Wait `first_check` seconds, then loop:
-
-```bash
-python "<skill_dir>/scripts/transcribe.py" \
-  --job-id <job_id> \
-  --check-once \
-  --output-path <base_path> \
-  --diarization <true|false> \
-  [--output-mode summary|both]
-```
+Every following call is the same command with `--wait 20`. `--wait` replaces `sleep`: do not run separate sleep commands. Values above 25 are capped at 25.
 
 | Exit code | Output line | What to do |
 |---|---|---|
 | `0` | `[DONE] ...` | Continue to Step 4 |
-| `3` | `[STATUS] processing X%` | Tell user: "מתמלל... X%", sleep `poll_interval` seconds, repeat |
-| `3` | `[STATUS] summarizing` | Tell user: "התמלול מוכן, מסכם...", sleep `poll_interval` seconds, repeat |
+| `3` | `[STATUS] processing X%` | Tell user: "מתמלל... X%", run again with `--wait 20` |
+| `3` | `[STATUS] summarizing` | Tell user: "התמלול מוכן, מסכם...", run again with `--wait 20` |
 | `1` | `ERROR: ...` | Go to Troubleshooting |
 
-**Safety cap**: after 20 iterations without exit 0, tell the user and stop.
+Keep the user updated, but don't repeat the same message on every call — report only when the percentage or the stage changes.
+
+**Safety cap**: after 60 calls (~20 minutes) without exit 0, tell the user the job is still running, give them the Job ID, and stop. They can resume later with the same command.
 
 ## Step 3.5: Convert existing JSON (optional)
 
@@ -450,7 +426,7 @@ This usually means the API response had a different structure than expected.
 
 1. Re-run with JSON format to see the raw response:
    ```bash
-   python "<skill_dir>/scripts/transcribe.py" --job-id <JOB_ID> --output-format json
+   python "<skill_dir>/scripts/transcribe.py" --job-id <JOB_ID> --check-once --output-format json
    ```
 2. Open the JSON file and look for where the text segments actually are
 3. Check the structure: is it `result.segments` or `result.result.segments`?
@@ -466,9 +442,13 @@ If the process was interrupted or the output file was lost, you can recover usin
 ```bash
 python "<skill_dir>/scripts/transcribe.py" \
   --job-id <JOB_ID> \
+  --check-once \
   --diarization <true|false> \
+  [--output-mode summary|both] \
   --output-format text
 ```
+
+If it exits 3, the job is still running — continue with the Step 3 loop (`--wait 20`).
 
 To query a job directly (raw API):
 ```bash
@@ -480,13 +460,13 @@ curl -X POST https://agents.text-ops-subs.com/api/v2/transcribe-status \
 
 ### Process took too long / timeout
 
-- The script polls for up to ~15 minutes (60 polls × 15s for large files, 120 polls × 5s for small files)
+- The Step 3 loop stops after 60 calls (~20 minutes); the job keeps running on the server
 - For files longer than 60 minutes with diarization, this may not be enough
-- Use `--job-id` to resume polling after a timeout
+- Resume later with the same `--job-id ... --check-once --wait 20` command
 
 ### Script printed "Done!" but the file is empty
 
-Run with `--job-id` to re-fetch and inspect the raw `.json` output for where the content actually lives.
+Run with `--job-id <JOB_ID> --check-once` to re-fetch and inspect the raw `.json` output for where the content actually lives.
 
 ---
 
