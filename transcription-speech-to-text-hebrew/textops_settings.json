@@ -2,5 +2,6 @@
   "TEXTOPS_API_KEY": "YOUR_API_KEY_HERE",
   "language": "he",
   "num_speakers": 1,
-  "word_timestamps": false
+  "word_timestamps": false,
+  "output": "transcript"
 }
