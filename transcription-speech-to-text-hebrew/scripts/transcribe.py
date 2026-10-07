@@ -97,6 +97,7 @@ SMALL_FILE_MB    = 20     # threshold in MB (local files)
 SMALL_DURATION_SEC = 1200 # threshold in seconds = 20 min (URL files)
 MAX_FILE_MB      = 2048   # 2 GB upload limit
 MAX_POLLS        = 180    # 180 × 5s = 15 min max
+MAX_CHECK_WAIT   = 25     # --check-once --wait cap: every command must stay short
 
 SOCIAL_MEDIA_HOSTNAMES = {
     "facebook.com", "www.facebook.com", "m.facebook.com", "fb.watch",
@@ -516,6 +517,8 @@ def main():
                         help="Upload and submit, print Job ID + timing hints, exit immediately (no polling)")
     parser.add_argument("--check-once", action="store_true",
                         help="With --job-id: poll once. Exit 0=done (files saved), 3=still processing, 1=error")
+    parser.add_argument("--wait", type=float, default=0,
+                        help=f"With --check-once: wait this many seconds before the check (max {MAX_CHECK_WAIT})")
     args = parser.parse_args()
 
     if args.balance:
@@ -562,7 +565,12 @@ def main():
     # ── resume / check-once from existing job ID ─────────────────────────────
     if args.job_id:
         if args.check_once:
-            # Single poll — no sleep, exit immediately with status code
+            # Single poll. Optional short wait first, so the caller needs no separate sleep
+            # and every command still finishes within ~30 seconds.
+            wait = max(0.0, min(args.wait or 0, MAX_CHECK_WAIT))
+            if wait:
+                log(f"[WAIT] {wait:.0f}s")
+                time.sleep(wait)
             res = requests.post(CHECK_JOB_URL,
                                 json={"textopsJobId": args.job_id},
                                 headers={"textops-api-key": API_KEY})
