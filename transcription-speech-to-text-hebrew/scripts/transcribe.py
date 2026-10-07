@@ -70,7 +70,7 @@ def _load_settings():
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "textops_settings.json",
     )
-    result = {"language": "he", "num_speakers": 1, "word_timestamps": False, "output": "transcript"}
+    result = {"language": "he", "num_speakers": 1, "word_timestamps": False}
     if os.path.isfile(settings_path):
         try:
             with open(settings_path, encoding="utf-8") as f:
@@ -228,15 +228,13 @@ def upload_file(upload_url, file_path, filename):
 
 # ── submit + poll ─────────────────────────────────────────────────────────────
 
-def submit_job(download_url, has_diarization, word_timestamps=False, is_hebrew=True, summary=False):
+def submit_job(download_url, has_diarization, word_timestamps=False, is_hebrew=True):
     params = {
         "word_timestamps": word_timestamps,
         "is_hebrew": is_hebrew,
     }
     if has_diarization is False:
         params["enable_diarization"] = False
-    if summary:
-        params["summary"] = True   # cloud summary (Markdown) is added to the job when done
     log("[JOB] Submitting...")
     for attempt in range(1, 4):
         res = requests.post(SUBMIT_MODAL_URL,
@@ -272,29 +270,12 @@ def submit_job(download_url, has_diarization, word_timestamps=False, is_hebrew=T
     return job_id, server_duration
 
 
-SUMMARY_FINAL = ("done", "error")
-
-
-def wants_summary(data, requested):
-    return bool(requested or (data.get("params") or {}).get("summary"))
-
-
-def is_job_ready(data, want_summary):
-    """Transcript done and — if a summary was requested — the summary finished too.
-    summary_status is set together with status=done by the server; if it is missing
-    the server doesn't support summaries, so don't wait for one."""
+def is_job_ready(data):
     has_segments = bool(data.get("result", {}).get("segments"))
-    if not (data.get("status") == "done" or has_segments):
-        return False
-    if want_summary and data.get("summary_status") and data.get("summary_status") not in SUMMARY_FINAL:
-        return False
-    return True
+    return data.get("status") == "done" or has_segments
 
 
-def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_POLLS, want_summary=False,
-             on_transcript_ready=None):
-    """on_transcript_ready(data) is called once when the transcript is done but the
-    summary is still running, so the transcript can be saved without waiting."""
+def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_POLLS):
     if initial_wait is not None:
         log(f"[WAIT] First check in {initial_wait:.0f}s (estimated processing time)")
         time.sleep(initial_wait)
@@ -317,18 +298,9 @@ def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_PO
             log(f"ERROR: Processing failed: {data.get('user_messages') or status}")
             sys.exit(1)
 
-        if is_job_ready(data, wants_summary(data, want_summary)):
+        if is_job_ready(data):
             log(f"[DONE] Processing complete ({elapsed()}s total)")
             return data
-
-        if status == "done" and data.get("summary_status"):
-            if last_progress != "summary":
-                log(f"[SUMMARY] Transcript ready — summarizing... ({elapsed()}s elapsed)")
-                last_progress = "summary"
-                if on_transcript_ready:
-                    on_transcript_ready(data)
-            time.sleep(poll_interval)
-            continue
 
         # print progress only when it changes (avoid log spam)
         if progress != last_progress:
@@ -383,27 +355,6 @@ def write_json(data, output_path):
 
 # ── output writer (shared by full-poll and --check-once paths) ────────────────
 
-def summary_path_for(output_path):
-    base = os.path.splitext(output_path)[0]
-    if base.endswith("_transcript"):
-        base = base[: -len("_transcript")]
-    return base + "_summary.md"
-
-
-def save_summary(data, output_path):
-    summary = data.get("summary")
-    if summary:
-        path = summary_path_for(output_path)
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(summary.strip() + "\n")
-        log(f"[FILE] SUMMARY: {path} ({len(summary):,} chars, markdown)")
-    elif data.get("summary_status") == "error":
-        log(f"WARNING: Summary failed: {data.get('summary_error') or 'unknown error'}")
-    else:
-        log("WARNING: No summary in the response (the server may not support summaries yet)")
-
-
 def transcript_txt_path(output_path):
     return os.path.splitext(output_path)[0] + ".txt"
 
@@ -415,11 +366,7 @@ def resolve_diarize(data, has_diarize):
     return has_diarize
 
 
-def save_output(data, output_path, has_diarize, output_format, output_mode="transcript"):
-    if output_mode in ("summary", "both") or data.get("summary"):
-        save_summary(data, output_path)
-    if output_mode == "summary":
-        return
+def save_output(data, output_path, has_diarize, output_format):
     save_transcript(data, output_path, has_diarize)
 
 
@@ -510,7 +457,6 @@ def main():
         _diar_default = "true"
     _wt_default  = "true" if _s.get("word_timestamps") else "false"
     _heb_default = "true" if _s.get("language", "he") == "he" else "false"
-    _out_default = _s.get("output") if _s.get("output") in ("transcript", "summary", "both") else "transcript"
 
     parser = argparse.ArgumentParser(description="TextOps transcription")
     parser.add_argument("--balance", action="store_true",
@@ -526,9 +472,6 @@ def main():
                         help="Word-level timestamps (slower): true/false (default: from textops_settings.json)")
     parser.add_argument("--is-hebrew", default=_heb_default,
                         help="Route to Hebrew model (true) or multilingual model (false) (default: from textops_settings.json)")
-    parser.add_argument("--output-mode", default=_out_default,
-                        choices=["transcript", "summary", "both"],
-                        help="transcript = .json+.txt / summary = cloud summary .md only / both (default: from textops_settings.json)")
     parser.add_argument("--output-format", default="json",
                         choices=["json", "text"], help="Output format")
     parser.add_argument("--output-path", default=None,
@@ -562,8 +505,6 @@ def main():
     has_word_ts   = args.word_timestamps.lower() in ("true", "1", "yes")
     is_hebrew     = args.is_hebrew.lower() not in ("false", "0", "no")
     output_format = args.output_format
-    output_mode   = args.output_mode
-    want_summary  = output_mode in ("summary", "both")
 
     if args.playlist:
         print_playlist_info(args.playlist)
@@ -582,11 +523,6 @@ def main():
         ext  = ".json" if output_format == "json" else ".txt"
         output_path = os.path.join(os.getcwd(), base + "_transcript" + ext)
 
-    def early_transcript(data):
-        if output_mode == "both":
-            save_transcript(data, output_path, resolve_diarize(data, has_diarize))
-            log("[TRANSCRIPT_READY] Transcript saved — summary still running")
-
     # ── resume / check-once from existing job ID ─────────────────────────────
     if args.job_id:
         if args.check_once:
@@ -604,26 +540,16 @@ def main():
             if data.get("has_error"):
                 log(f"ERROR: Processing failed: {data.get('user_messages') or data.get('status', '?')}")
                 sys.exit(1)
-            if is_job_ready(data, wants_summary(data, want_summary)):
+            if is_job_ready(data):
                 log(f"[DONE] Processing complete ({elapsed()}s total)")
-                save_output(data, output_path, resolve_diarize(data, has_diarize), output_format, output_mode)
+                save_output(data, output_path, resolve_diarize(data, has_diarize), output_format)
                 sys.exit(0)
-            if data.get("status") == "done" and data.get("summary_status"):
-                # Transcript is ready, summary still running: hand the transcript over now
-                # (once), so the user can start working with it.
-                if output_mode != "summary" and not os.path.exists(transcript_txt_path(output_path)):
-                    save_transcript(data, output_path, resolve_diarize(data, has_diarize))
-                    log("[TRANSCRIPT_READY] Transcript saved — summary still running")
-                    sys.exit(4)
-                log("[STATUS] summarizing")
-                sys.exit(3)
             progress = data.get("progress", 0)
             log(f"[STATUS] processing {progress}%")
             sys.exit(3)
 
         log(f"[JOB] Resuming with existing Job ID: {args.job_id}")
-        data = poll_job(args.job_id, initial_wait=None, want_summary=want_summary,
-                        on_transcript_ready=early_transcript)
+        data = poll_job(args.job_id, initial_wait=None)
         has_diarize = resolve_diarize(data, has_diarize)
     else:
         file_arg = args.file
@@ -661,7 +587,7 @@ def main():
         poll_interval = POLL_INTERVAL
         max_polls     = MAX_POLLS
 
-        job_id, server_duration = submit_job(download_url, has_diarize, has_word_ts, is_hebrew, want_summary)
+        job_id, server_duration = submit_job(download_url, has_diarize, has_word_ts, is_hebrew)
 
         # For URLs (e.g. YouTube), local duration is unknown — use server-returned duration
         if initial_wait is None and server_duration:
@@ -675,11 +601,10 @@ def main():
             log(f"[TIMING] first_check={first_check}s poll_interval={poll_interval}s estimated_total={est_total}s")
             sys.exit(0)
 
-        data   = poll_job(job_id, initial_wait, poll_interval, max_polls, want_summary,
-                          on_transcript_ready=early_transcript)
+        data   = poll_job(job_id, initial_wait, poll_interval, max_polls)
         has_diarize = resolve_diarize(data, has_diarize)
 
-    save_output(data, output_path, has_diarize, output_format, output_mode)
+    save_output(data, output_path, has_diarize, output_format)
 
 
 if __name__ == "__main__":
