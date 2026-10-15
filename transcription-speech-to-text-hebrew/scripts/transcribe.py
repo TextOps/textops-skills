@@ -270,6 +270,16 @@ def submit_job(download_url, has_diarization, word_timestamps=False, is_hebrew=T
     return job_id, server_duration
 
 
+def describe_status(data):
+    """One-line status of a running job, by the stage the server reports:
+    queued | downloading | preparing | transcribing N% | diarizing | finalizing.
+    Older servers report no stage: shown as transcribing N%."""
+    stage = data.get("stage") or "transcribing"
+    if stage == "transcribing":
+        return f"transcribing {data.get('progress', 0)}%"
+    return stage
+
+
 def is_job_ready(data):
     has_segments = bool(data.get("result", {}).get("segments"))
     return data.get("status") == "done" or has_segments
@@ -283,7 +293,7 @@ def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_PO
         log("[WAIT] Duration unknown — first check in 10s")
         time.sleep(10)
 
-    last_progress = -1
+    last_status = None
     for attempt in range(1, max_polls + 1):
         res = requests.post(CHECK_JOB_URL,
                             json={"textopsJobId": job_id},
@@ -292,7 +302,6 @@ def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_PO
         data = res.json()
 
         status   = data.get("status", "?")
-        progress = data.get("progress", 0)
 
         if data.get("has_error"):
             log(f"ERROR: Processing failed: {data.get('user_messages') or status}")
@@ -303,9 +312,10 @@ def poll_job(job_id, initial_wait, poll_interval=POLL_INTERVAL, max_polls=MAX_PO
             return data
 
         # print progress only when it changes (avoid log spam)
-        if progress != last_progress:
-            log(f"[PROGRESS] {progress}% ({elapsed()}s elapsed)")
-            last_progress = progress
+        current = describe_status(data)
+        if current != last_status:
+            log(f"[PROGRESS] {current} ({elapsed()}s elapsed)")
+            last_status = current
 
         time.sleep(poll_interval)
 
@@ -544,8 +554,7 @@ def main():
                 log(f"[DONE] Processing complete ({elapsed()}s total)")
                 save_output(data, output_path, resolve_diarize(data, has_diarize), output_format)
                 sys.exit(0)
-            progress = data.get("progress", 0)
-            log(f"[STATUS] processing {progress}%")
+            log(f"[STATUS] {describe_status(data)}")
             sys.exit(3)
 
         log(f"[JOB] Resuming with existing Job ID: {args.job_id}")
