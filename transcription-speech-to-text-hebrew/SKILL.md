@@ -352,8 +352,19 @@ Every following call is the same command with `--wait 20`. `--wait` replaces `sl
 | Exit code | Output line | What to do |
 |---|---|---|
 | `0` | `[DONE] ...` | Continue to Step 4 |
-| `3` | `[STATUS] processing X%` | Tell user: "מתמלל... X%", run again with `--wait 20` |
+| `3` | `[STATUS] <stage> ...` | Tell the user the stage (table below), run again with `--wait 20` |
 | `1` | `ERROR: ...` | Go to Troubleshooting |
+
+The stages, in order:
+
+| Output line | Tell the user |
+|---|---|
+| `[STATUS] queued` | "ממתין לשרת..." |
+| `[STATUS] downloading X% (a/b MB)` | YouTube: "מוריד מיוטיוב... X% (a/b MB)", otherwise "מוריד את הקובץ... X%" (the % or MB may be missing) |
+| `[STATUS] preparing` | "✓ ההורדה הושלמה — מכין את האודיו..." |
+| `[STATUS] transcribing X%` | "מתמלל... X%" |
+| `[STATUS] diarizing` | "✓ התמלול הושלם — מזהה דוברים..." |
+| `[STATUS] finalizing` | "✓ התמלול הושלם — שולח לעיבוד סופי..." |
 
 Keep the user updated, but don't repeat the same message on every call — report only when the percentage or the stage changes.
 
