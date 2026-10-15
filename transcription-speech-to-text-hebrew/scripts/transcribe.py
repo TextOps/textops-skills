@@ -271,13 +271,11 @@ def submit_job(download_url, has_diarization, word_timestamps=False, is_hebrew=T
 
 
 def describe_status(data):
-    """One-line status of a running job, by the stage the server reports:
-    queued | downloading | preparing | transcribing N% | diarizing | finalizing.
-    Older servers report no stage: shown as transcribing N%."""
+    """One-line status of a running job: the stage the server reports and the whole job's progress,
+    e.g. "downloading 15%" (queued 10 / downloading 15 / preparing 20 / transcribing 40-70 /
+    diarizing 70 / finalizing 99). Older servers report no stage: shown as transcribing N%."""
     stage = data.get("stage") or "transcribing"
-    if stage == "transcribing":
-        return f"transcribing {data.get('progress', 0)}%"
-    return stage
+    return f"{stage} {data.get('progress', 0)}%"
 
 
 def is_job_ready(data):

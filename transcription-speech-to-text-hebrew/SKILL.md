@@ -4,7 +4,7 @@ description: Transcribe audio or video files using the TextOps API. Use this ski
 license: MIT
 compatibility: "Designed for Claude Code. Requires Python 3.8+, TEXTOPS_API_KEY (via textops_settings.json or environment variable), and internet access. Optional: ffprobe (time estimates). YouTube and social media links are downloaded in the TextOps cloud — nothing is downloaded locally."
 metadata:
-  version: "1.1.23"
+  version: "1.1.24"
   author: "TextOps"
   tags: "transcription, speech-to-text, audio, video, hebrew, diarization, youtube, facebook, instagram, twitter, social-media"
   language: "he"
@@ -359,12 +359,14 @@ The stages, in order:
 
 | Output line | Tell the user |
 |---|---|
-| `[STATUS] queued` | "ממתין לשרת..." |
-| `[STATUS] downloading` | YouTube: "מוריד מיוטיוב...", otherwise "מוריד את הקובץ..." |
-| `[STATUS] preparing` | "✓ ההורדה הושלמה — מכין את האודיו..." |
+| `[STATUS] queued X%` | "ממתין לשרת... X%" |
+| `[STATUS] downloading X%` | YouTube: "מוריד מיוטיוב... X%", otherwise "מוריד את הקובץ... X%" |
+| `[STATUS] preparing X%` | "✓ ההורדה הושלמה — מכין את האודיו... X%" |
 | `[STATUS] transcribing X%` | "מתמלל... X%" |
-| `[STATUS] diarizing` | "✓ התמלול הושלם — מזהה דוברים..." |
-| `[STATUS] finalizing` | "✓ התמלול הושלם — שולח לעיבוד סופי..." |
+| `[STATUS] diarizing X%` | "✓ התמלול הושלם — מזהה דוברים... X%" |
+| `[STATUS] finalizing X%` | "✓ התמלול הושלם — שולח לעיבוד סופי... X%" |
+
+X is the whole job's progress and only goes up: received 10%, downloading 15%, download done 20%, transcribing 40–70%, speakers 70%, final processing 99%, done 100%.
 
 Keep the user updated, but don't repeat the same message on every call — report only when the percentage or the stage changes.
 
