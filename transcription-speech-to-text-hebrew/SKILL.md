@@ -360,7 +360,7 @@ The stages, in order:
 | Output line | Tell the user |
 |---|---|
 | `[STATUS] queued` | "ממתין לשרת..." |
-| `[STATUS] downloading X% (a/b MB)` | YouTube: "מוריד מיוטיוב... X% (a/b MB)", otherwise "מוריד את הקובץ... X%" (the % or MB may be missing) |
+| `[STATUS] downloading` | YouTube: "מוריד מיוטיוב...", otherwise "מוריד את הקובץ..." |
 | `[STATUS] preparing` | "✓ ההורדה הושלמה — מכין את האודיו..." |
 | `[STATUS] transcribing X%` | "מתמלל... X%" |
 | `[STATUS] diarizing` | "✓ התמלול הושלם — מזהה דוברים..." |

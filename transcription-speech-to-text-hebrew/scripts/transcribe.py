@@ -272,16 +272,9 @@ def submit_job(download_url, has_diarization, word_timestamps=False, is_hebrew=T
 
 def describe_status(data):
     """One-line status of a running job, by the stage the server reports:
-    queued | downloading N% (x/y MB) | preparing | transcribing N% | diarizing | finalizing.
+    queued | downloading | preparing | transcribing N% | diarizing | finalizing.
     Older servers report no stage: shown as transcribing N%."""
     stage = data.get("stage") or "transcribing"
-    if stage == "downloading":
-        pct = data.get("download_pct")
-        got, total = data.get("downloaded_bytes"), data.get("total_bytes")
-        text = "downloading" + (f" {pct}%" if pct is not None else "")
-        if got:
-            text += f" ({got / 1e6:.1f}/{total / 1e6:.1f} MB)" if total else f" ({got / 1e6:.1f} MB)"
-        return text
     if stage == "transcribing":
         return f"transcribing {data.get('progress', 0)}%"
     return stage
