@@ -4,7 +4,7 @@ description: Create stick-figure animations (MP4, GIF and an editable .styk proj
 license: MIT
 compatibility: "Designed for Claude Code. Requires git, Node.js 22+, Python 3.10+ with Pillow, FFmpeg, and Playwright with Chromium."
 metadata:
-  version: "1.0.1"
+  version: "1.1.0"
   author: "TextOps"
 ---
 
@@ -13,6 +13,10 @@ metadata:
 You build the animation **as code**: a Node script writes a native StykAnimate document (JSON) using the app's
 own helpers, StykAnimate's renderer draws every frame in headless Chromium, ffmpeg encodes it, and the app's
 local service converts it to a `.styk` project the user can open and edit at https://app.stykanimate.com.
+
+Making standalone clips (social posts, GIFs)? This file is enough. Embedding the sticks as beats in a
+larger narrated video (Remotion or similar)? Read `references/pipeline-integration.md` too — it covers
+clip export (black/alpha), the foot-lock drift gate, sticks-lead structure, and timing from narration.
 
 Nothing here needs a GPU or the Electron app. Read `references/document-model.md` before writing a scene —
 the coordinate and angle conventions are not obvious and getting them wrong wastes a render cycle.
