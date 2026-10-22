@@ -24,6 +24,7 @@ Then create a free API key at https://agents.text-ops-subs.com/en and save it in
 | [`hebrew-tech-lecture-summary`](hebrew-tech-lecture-summary/) | Summarize lectures, meetings, articles or transcripts into structured Hebrew Markdown. |
 | [`media-files-conversion-ffmpeg`](media-files-conversion-ffmpeg/) | FFmpeg conversion, extraction, trimming, resizing and compression in natural language. |
 | [`media-fixing-and-repair`](media-fixing-and-repair/) | Diagnose and repair broken or out-of-sync media files with FFmpeg/FFprobe. |
+| [`stick-figure-animation-stykanimate`](stick-figure-animation-stykanimate/) | Stick-figure animations for social posts and explainers (MP4, looping GIF and an editable `.styk` project) with the open-source [StykAnimate](https://github.com/filippocalippo/StykAnimate-App) renderer. |
 
 ## Why TextOps for Hebrew
 
