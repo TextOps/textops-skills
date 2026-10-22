@@ -4,7 +4,7 @@ description: Create stick-figure animations (MP4, GIF and an editable .styk proj
 license: MIT
 compatibility: "Designed for Claude Code. Requires git, Node.js 22+, Python 3.10+ with Pillow, FFmpeg, and Playwright with Chromium."
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   author: "TextOps"
 ---
 
