@@ -1,4 +1,5 @@
 // "Who monitors the monitor?" — a guard tries to unplug the camera that watches him. Native StykAnimate document.
+// Style chosen by the user: black silhouettes on off-white, red accent, Inter Display — matched to their reference image.
 import fs from 'node:fs';
 // STYK_APP = the app directory printed by scripts/setup.sh
 const APP = `${process.env.STYK_APP || `${process.env.HOME}/StykAnimate-App`}/src/`;

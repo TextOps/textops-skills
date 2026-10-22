@@ -29,7 +29,7 @@ Segment:
 ```js
 { segment_id: 1, parent_id: 0,           // 0 = attached to the figure's root (the object's root_x/root_y)
   length: 190, angle_rad: -Math.PI/2,    // default pose; frames override angles
-  thickness: 58, color_rgb: [17,17,17], transparency: 0,   // transparency 0–255
+  thickness: 58, color_rgb: [r, g, b], transparency: 0,    // the user's colors; transparency 0–255
   visible: true, z_order: 1,             // higher draws on top
   segment_type: 'line', segment_kind: 'line', primitive_code: 0, aux_code: 0, flags: 0, bend_rad: 0 }
 ```

@@ -15,9 +15,10 @@ export const drawOrder = (fig, ids) => ids.forEach((id, i) => { fig.segments[id 
 
 /**
  * Standard person: 1 torso, 2 head, 3-4 near arm, 5-6 far arm, 7-8 near leg, 9-10 far leg.
- * `k` scales the 960×540 proportions (use ~2.3 for a full-height figure at 1080×1350).
+ * `color` / `farColor` are the user's chosen colors (required). `k` scales the 960×540 proportions (use ~2.3 for a full-height figure at 1080×1350).
  */
-export function person(id, name, { k = 1, color = [17, 17, 17], farColor = color, torso = 13, limb = 10 } = {}) {
+export function person(id, name, { k = 1, color, farColor = color, torso = 13, limb = 10 } = {}) {
+  if (!color) throw new Error('person(): pass the color the user chose');
   const L = { torso: 80 * k, head: 42 * k, upper: 54 * k, fore: 50 * k, thigh: 66 * k, shin: 64 * k };
   const far = { color_rgb: farColor };
   const f = figure(id, name, [
