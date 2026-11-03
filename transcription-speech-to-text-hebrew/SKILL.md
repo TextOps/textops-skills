@@ -4,7 +4,7 @@ description: Transcribe audio or video files using the TextOps API. Use this ski
 license: MIT
 compatibility: "Designed for Claude Code. Requires Python 3.8+, TEXTOPS_API_KEY (via textops_settings.json or environment variable), and internet access. Optional: ffprobe (time estimates). YouTube and social media links are downloaded in the TextOps cloud — nothing is downloaded locally."
 metadata:
-  version: "1.1.24"
+  version: "1.1.25"
   author: "TextOps"
   tags: "transcription, speech-to-text, audio, video, hebrew, diarization, youtube, facebook, instagram, twitter, social-media"
   language: "he"
@@ -458,9 +458,13 @@ curl -X POST https://agents.text-ops-subs.com/api/v2/transcribe-status \
   -d '{"textopsJobId": "<JOB_ID>"}'
 ```
 
+### `ERROR: Processing failed: ['העבודה לא הסתיימה בזמן — אפשר לשלוח את הקובץ שוב']`
+
+The server marks a job as failed when the transcription server sent no update for 10 minutes (it crashed or ran out of memory; a live job sends a heartbeat every 2 minutes). The job will not finish and the user was not charged for it. Submit the same file once more as a new job (Step 2). If it fails the same way again, tell the user and stop.
+
 ### Process took too long / timeout
 
-- The Step 3 loop stops after 60 calls (~20 minutes); the job keeps running on the server
+- The Step 3 loop stops after 60 calls (~20 minutes); the job keeps running on the server (a job that really died is reported as failed by the server, see above)
 - For files longer than 60 minutes with diarization, this may not be enough
 - Resume later with the same `--job-id ... --check-once --wait 20` command
 
